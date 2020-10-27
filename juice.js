@@ -2,6 +2,79 @@
 
     juice.color = _COLOR.dull;
 
+    juice.signal = {};
+    juice.slot = {};
+
+    juice._uis = [];
+
+    window.addEventListener('load', (event) => {
+        if (juice.splashscreen != undefined) juice.splashscreen.show()
+        juice._uis.forEach(function(item, index, array) {
+            item.build();
+        });
+        //juice.splashscreen.hide();
+        window.setTimeout(function(){if (juice.splashscreen != undefined) juice.splashscreen.hide()},500);
+    });
+
+    class Splashscreen {
+        constructor() {
+            this.div = document.createElement('div');
+            this.div.style.cssText = 'background-color:#fff;z-index:100000;width:100%;height:100%;position:absolute;top:0px;left:0px;right:0px;bottom:0px;transition:opacity 0.3s ease-in-out;'
+            this.div.addEventListener('transitionend',function(e){if (this.style.opacity == 0) {this.style.display='none';}},{once:true});
+
+            this.color_div = document.createElement('div');
+            this.color_div.style.cssText = 'background-color:#fff;width:100%;height:100%;opacity:0;transition:opacity 0.3s ease-in-out;display:flex;align-items:center;justify-content:center;'
+            this.div.appendChild(this.color_div);
+            self = this;
+            this.content_div = document.createElement('div');
+            this.color_div.appendChild(this.content_div);
+        }
+
+        show() {
+            document.body.appendChild(this.div);
+            this.color_div.style.opacity = 1;
+            return this;
+        }
+
+        hide() {
+            this.div.style.opacity = 0;
+            return this;
+        }
+
+        color(string) {
+            if (juice.color.hasOwnProperty(string)) this.color_div.style.backgroundColor = juice.color[string].normal;
+            else console.log('Error: Invalid color given. Got "'+string+'".');
+            return this;
+        }
+
+        text(string) {
+            this.content_div.style.content = '';
+            this.content_div.innerHTML = string;
+        }
+
+        image(path) {
+            this.content_div.innerHTML = '';
+            this.content_div.style.content = 'url('+path+')';
+
+            return this;
+        }
+
+        width(size) {
+            this.content_div.style.width = size;
+            return this;
+        }
+
+        height(size) {
+            this.content_div.style.height = size;
+            return this;
+        }
+    }
+
+    juice.createSplashscreen = function () {
+        juice.splashscreen = new Splashscreen();
+        return juice.splashscreen;
+    }
+
     class View {
         constructor() {
 
@@ -37,6 +110,7 @@
             this._media = {};
             this._layouts = {};
             this._view = new View();
+            juice._uis.push(this);
             return new Proxy(this, {
                 get: function(target, name, receiver) {
                     if ( !['media','build','layout'].includes(name) && !(name[0] == '_') ) {
@@ -60,14 +134,17 @@
         build(parent) {
             if (!parent) {
                 parent = document.body;
+                parent.style.cssText += "font-family: Verdana;font-size:12px;margin:0;padding:0;";
+                //parent.style.cssText += "font-family: 'Baloo Chettan 2', cursive;margin:0;padding:0;";
             }
-            parent.style.cssText += "font-family: 'Baloo Chettan 2', cursive;margin:0;padding:0;";
             var media_name = this._check_media_expressions();
             if (!media_name) console.log('Warning: Please provide a default media configuration.');
             if (!this._layouts.hasOwnProperty(media_name)) console.log('Error: Media defintion "'+media_name+'" was not found.');
             var layout = this._layouts[media_name];
             this._layout = layout;
+            if (parent == document.body) layout.div.style.cssText += 'position:absolute;top:0px;bottom:0px;right:0px;left:0px;'
             parent.appendChild(layout.div)
+            layout.activate();
         }
 
         /*
@@ -89,6 +166,7 @@
             this.div = document.createElement('div');
             this.div.style.cssText = 'display:flex;box-sizing:border-box;overflow:hidden;';
             this.flow('lr');
+            this._children = [];
         }
         define(name) {
             //TODO: check name validity (no built-in method, no underscore)
@@ -100,19 +178,39 @@
             w._ui = this._ui;
             w._layout = this._layout;
             this.div.appendChild(w.div);
+            this._children.push(w);
             this[name] = w;
             return w;
         }
 
+        insert(item) {
+            this._layout._inserts.push([item, this]);
+            return this;
+        }
+
+        clear() {
+            this._children.forEach(child => {
+                this.div.removeChild(child.div);
+                this[child._name] = undefined;
+            })
+            this._children = [];
+            return this;
+        }
+
         _parse_size_string(string, query) {
             if (string == 'fill') {
-                if (this._parent._flow.includes('column') && query == 'height') {
+                if (this._parent == undefined) {
                     this.div.style.flex = '1';
                     string = '';
-                } else if (this._parent._flow.includes('row') && query == 'width') {
-                    this.div.style.flex = '1';
-                    string = '';
-                } else string = '100%';
+                } else {
+                    if (this._parent._flow.includes('column') && query == 'height') {
+                        this.div.style.flex = '1';
+                        string = '';
+                    } else if (this._parent._flow.includes('row') && query == 'width') {
+                        this.div.style.flex = '1';
+                        string = '';
+                    } else string = '100%';
+                }
             } else if (string == 'square') {
                 console.log('Warning: Not implemented yet.')
                 string = '';
@@ -121,7 +219,8 @@
             } else {
                 if (string[0] == '-') string = '100%'+string;
                 if (string[0] == '/') string = '100%'+string; // ?
-                if (string.includes('u')) string = string.replace(/u/, '*'+this._layout._gridsize+'px');
+                var gridsize = (this._layout == undefined) ? 30 : this._layout._gridsize;
+                if (string.includes('u')) string = string.replace(/u/, '*'+gridsize+'px');
                 if (string.includes('-')) string = string.replace(/-/, ' - ');
             }
             return string;
@@ -168,6 +267,20 @@
             return this;
         }
 
+        align(string) {
+            if (string == 'center') this.div.style.alignItems = 'center';
+            else if (string == 'left' || string == 'top') this.div.style.alignItems = 'flex-start';
+            else if (string == 'right' || string == 'bottom') this.div.style.alignItems = 'flex-end';
+            return this;
+        }
+
+        spacer(string) {
+            var spacer = this.define('_spacer')
+            if (this._flow.includes('row')) spacer.width(string);
+            else if (this._flow.includes('column')) spacer.height(string);
+            return this;
+        }
+
         gap(string) {
             this.div.style.gap = string;
             return this;
@@ -185,6 +298,22 @@
             this.pad(string);
             return this;
         }
+
+        margin(string) {
+            this.div.style.margin = string;
+            return this;
+        }
+
+        on(event, signal, ...args) {
+            if (typeof signal === "function") this.div.addEventListener(event, signal);
+            else this.div.addEventListener(event, function(e){juice.signal[signal](e,...args)});
+            return this;
+        }
+
+        slot(name) {
+            juice.slot[name] = this;
+            return this;
+        }
     }
 
     juice.Layout = class Layout extends DivBasedElement {
@@ -194,10 +323,24 @@
             this._ui = ui;
             this._layout = this;
             this._gridsize = 30;
+            this._inserts = [];
         }
 
         gridsize(gridsize) {
             this._gridsize = gridsize;
+            return this;
+        }
+
+        activate() {
+            for (var pair of this._inserts) {
+                var widget = pair[0];
+                var parent = pair[1];
+                widget._parent = parent;
+                widget._ui = this._ui;
+                widget._layout = this._layout;
+                parent.div.appendChild(widget.div);
+                parent._children.push(widget);
+            }
             return this;
         }
 
@@ -207,26 +350,32 @@
 
         constructor() {
             super();
-            this.color('none');
+            this.color('parent');
         }
 
         init() {}
 
-        parent() {
+        end() {
             return this._parent;
         }
 
         color(string) {
             var color = '';
             if (string == 'parent') {
-                color = this._parent._color || '';
+                if (this._parent && this._parent.hasOwnProperty('_color')) color = this._parent._color || '';
                 //TODO: implement event listener in case of parent color change
             } else if (string == 'none') {
                 color = '';
             } else if (juice.color.hasOwnProperty(string)) color = juice.color[string];
             else console.log('Error: Invalid color given. Got "'+string+'".');
             this.div.style.backgroundColor = color.normal;
+            this.div.style.color = color.text;
             this._color = color;
+            return this;
+        }
+
+        opacity(number) {
+            this.div.style.opacity = number;
             return this;
         }
 
@@ -256,9 +405,13 @@
             var newObject = new component[className]();
             Object.assign(newObject, this);
             newObject.init();
-            this._parent.div.removeChild(this.div);
-            this._parent.div.appendChild(newObject.div);
-            this._parent[this._name] = newObject;
+            if (this._parent != undefined) {
+                this._parent.div.removeChild(this.div);
+                this._parent.div.appendChild(newObject.div);
+                this._parent._children.splice(this._parent._children.indexOf(this), 1);
+                this._parent._children.push(newObject);
+                this._parent[this._name] = newObject;
+            }
             return newObject;
         }
     }
