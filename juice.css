@@ -1,0 +1,41 @@
+:root {
+    --handle-width: 15px;
+    --handle-height: 15px;
+    --handle-color: #eeeeee;
+    --handle-border-color: #eeeeee;
+    --handle-boder-width: 0px;
+    --handle-shadow: 0px;
+}
+
+.juiceSlider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 10px;
+  background: #eeeeee;
+  outline: none;
+  margin: auto;
+  border-radius: 5px;
+}
+
+.juiceSlider::-moz-focus-outer {border: 0;}
+
+.juiceSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--handle-width);
+  height: var(--handle-height);
+  border-radius: var(--handle-border-radius);
+  background: var(--handle-color);
+  box-shadow: var(--handle-shadow);
+  cursor: pointer;
+}
+
+.juiceSlider::-moz-range-thumb {
+  width: var(--handle-width);
+  height: var(--handle-height);
+  border-radius: var(--handle-border-radius);
+  border: var(--handle-border-width) solid var(--handle-border-color);
+  background: var(--handle-color);
+  box-shadow: var(--handle-shadow);
+  cursor: pointer;
+}
