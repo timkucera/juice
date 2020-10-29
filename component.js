@@ -14,7 +14,7 @@
         } else styles.forEach(item => applyStyle(item, elem));
     }
 
-    component.Button = class Button extends juice.Widget {
+    component.Button = class Button extends juice.Item {
 
         init() {
             //TODO: change to dynamic gridsize and color
@@ -53,7 +53,7 @@
         }
     }
 
-    component.Switch = class Switch extends juice.Widget {
+    component.Switch = class Switch extends juice.Item {
 
         init() {
             this.div.style.cssText += 'color:'+this._color.light+';background-color:'+this._color.dark+';user-select:none;outline:0;-webkit-user-select:none;cursor:pointer;position:relative;text-align:center;';
@@ -222,7 +222,7 @@
         }
     }
 
-    component.Image = class Image extends juice.Widget {
+    component.Image = class Image extends juice.Item {
 
         init() {
             this.div.style.color = '';
@@ -258,7 +258,7 @@
         }
     }
 
-    component.Shape = class Shape extends juice.Widget {
+    component.Shape = class Shape extends juice.Item {
 
         init() {
             this.div.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.normal+';';
@@ -276,7 +276,7 @@
         }
     }
 
-    component.Text = class Text extends juice.Widget {
+    component.Text = class Text extends juice.Item {
 
         init() {
             this.div.style.cssText += 'color:'+this._color.text+';background-color:'+this._color.normal+';';
@@ -319,7 +319,7 @@
         }
     }
 
-    component.Progress = class Progress extends juice.Widget {
+    component.Progress = class Progress extends juice.Item {
 
         init() {
             this.div.style.cssText += 'background-color:'+this._color.dark+';display:flex;overflow:hidden;';
@@ -363,7 +363,7 @@
         }
     }
 
-    component.Slider = class Slider extends juice.Widget {
+    component.Slider = class Slider extends juice.Item {
 
         init() {
             this._slider = document.createElement('input');
@@ -420,7 +420,7 @@
         }
     }
 
-    component.Input = class Input extends juice.Widget {
+    component.Input = class Input extends juice.Item {
 
         init() {
             this.div.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.light+';';
@@ -452,7 +452,7 @@
         }
     }
 
-    component.Page = class Page extends juice.Widget {
+    component.Page = class Page extends juice.Item {
 
         init() {
             this.div.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.light+';position:relative;overflow:hiiden;';
