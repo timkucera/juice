@@ -25,17 +25,23 @@
         }
 
         text(text) {
+            if (text == null) text = '';
             this.div.style.padding = '5px 10px 5px 10px';
             this.div.innerHTML = text;
             return this;
         }
 
-        bold() {
+        bold(string) {
+            if (string === null) this.div.style.fontWeight = 'normal';
             this.div.style.fontWeight = 'bold';
             return this;
         }
 
         image(path) {
+            if (path == null) {
+                this.div.style.content = '';
+                if (this.div.svg) this.div.removeChild(this.div.svg);
+            }
             this.div.style.padding = '3px';
             if (path.split('.').pop() == 'svg') {
                 if (this.div.svg) this.div.removeChild(this.div.svg);
@@ -48,6 +54,7 @@
         }
 
         style(style) {
+            if (style == null) style = juice.theme.style;
             applyStyle(style, this);
             return this;
         }
@@ -78,30 +85,36 @@
         }
 
         text(text) {
+            if (text == null) text = '';
             this.textOn(text);
             this.textOff(text);
             return this;
         }
 
         textOn(text) {
+            if (text == null) text = '';
             this._divOn.style.padding = '5px 10px 5px 10px';
             this._divOn.innerHTML = text;
             return this;
         }
 
         textOff(text) {
+            if (text == null) text = '';
             this._divOff.style.padding = '5px 10px 5px 10px';
             this._divOff.innerHTML = text;
             return this;
         }
 
-        bold() {
-            this._divOn.style.fontWeight = 'bold';
-            this._divOff.style.fontWeight = 'bold';
+        bold(string) {
+            if (string == null) var weight = 'normal';
+            else var weight = 'bold';
+            this._divOn.style.fontWeight = weight;
+            this._divOff.style.fontWeight = weight;
             return this;
         }
 
         transition(string) {
+            if (string == null) string = 'slide';
             this._transition = string;
             if (this._handle != undefined) {
                 this.div.removeChild(this._handle);
@@ -130,6 +143,10 @@
         }
 
         imageOn(path) {
+            if (path == null) {
+                this._divOn.style.content = '';
+                if (this._divOn.svg) this._divOn.removeChild(this._divOn.svg);
+            }
             this._divOn.style.padding = '3px';
             if (path.split('.').pop() == 'svg') {
                 var svg = document.createElement('div');
@@ -141,6 +158,10 @@
         }
 
         imageOff(path) {
+            if (path == null) {
+                this._divOff.style.content = '';
+                if (this._divOff.svg) this._divOn.removeChild(this._divOn.svg);
+            }
             this._divOff.style.padding = '3px';
             if (path.split('.').pop() == 'svg') {
                 var svg = document.createElement('div');
@@ -158,6 +179,7 @@
         }
 
         style(style) {
+            if (style === null) style = juice.theme.style;
             this._style = style;
             function applyStyleToHandle(style, elem) {
                 var styles = style.split(' ');
@@ -177,6 +199,7 @@
         }
 
         state(string) {
+            if (string == null) string = 'off';
             if (this._transition == 'push') {
                 if (string == 'on' || string == 1) {
                     this._divOn.style.opacity = 1;
@@ -232,16 +255,20 @@
         }
 
         source(path) {
+            if (path == null) {
+                if (this._img) this.div.removeChild(this._img);
+                if (this.svg) this.div.removeChild(this.svg);
+            }
             if (path.split('.').pop() == 'svg') {
                 var svg = document.createElement('div');
                 svg.style = 'width:100%;height:100%;background-color:'+this._color.dark+';-webkit-mask-image:url('+path+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;background-color 0.2s ease-in-out;';
                 this.div.appendChild(svg);
                 this.div.svg = svg;
             } else {
-                var _img = document.createElement('img');
-                _img.style = 'object-fit:contain;width:100%;height:100%;';
+                this._img = document.createElement('img');
+                this._img.style = 'object-fit:contain;width:100%;height:100%;';
                 this.div.appendChild(_img);
-                _img.src = path;
+                this._img.src = path;
             }
             return this;
         }
@@ -253,6 +280,7 @@
         }*/
 
         style(style) {
+            if (style == null) style = juice.theme.style;
             applyStyle(style, this);
             return this;
         }
@@ -266,11 +294,13 @@
         }
 
         shape(string) {
+            if (string == null) string = '';
             // TDOD: implement
             return this;
         }
 
         style(style) {
+            if (style == null) style = juice.theme.style;
             applyStyle(style, this);
             return this;
         }
@@ -284,36 +314,46 @@
         }
 
         text(text) {
+            if (text == null) text = '';
             this.div.innerHTML = text;
             return this;
         }
 
         fontsize(string) {
+            if (string == null) string = '12px';
             this.div.style.cssText += 'font-size:'+string+';';
             return this;
         }
 
-        bold() {
-            this.div.style.cssText += 'font-weight:900;';
+        bold(string) {
+            if (string == null) var weight = 'normal';
+            else var weight = '900';
+            this.div.style.cssText += 'font-weight:'+weight+';';
             return this;
         }
 
         italic() {
-            this.div.style.cssText += 'font-style:italic;';
+            if (string == null) var style = 'normal';
+            else var style = 'italic';
+            this.div.style.cssText += 'font-style:'+style+';';
             return this;
         }
 
         underline() {
-            this.div.style.cssText += 'text-decoration:underline;';
+            if (string == null) var style = 'normal';
+            else var style = 'underline';
+            this.div.style.cssText += 'text-decoration:'+style+';';
             return this;
         }
 
         align(string) {
+            if (string == null) string = '';
             this.div.style.textAlign = string;
             return this;
         }
 
         style(style) {
+            if (string == null) string = juice.theme.style;
             applyStyle(style, this);
             return this;
         }
@@ -331,15 +371,26 @@
         }
 
         default(value) {
+            if (value == null) value = 0;
             this.value = value;
             this._default = value;
             return this;
         }
 
-        vertical() {
+        vertical(string) {
+            if (string == null) return this.horizontal();
             this._direction = 'vertical';
-            this._progress.style.cssText += 'width:100%;';
+            this._progress.style.cssText += 'width:100%;height:;';
             this.div.style.cssText += 'flex-direction:column-reverse;';
+            this.value = this._value;
+            return this;
+        }
+
+        horizontal(string) {
+            if (string == null) return this.vertical();
+            this._direction = 'horizontal';
+            this._progress.style.cssText += 'height:100%;width:;';
+            this.div.style.cssText += 'flex-direction:row;';
             this.value = this._value;
             return this;
         }
@@ -358,6 +409,7 @@
         }
 
         style(style) {
+            if (style == null) style = juice.theme.style;
             applyStyle(style, this);
             return this;
         }
@@ -375,24 +427,29 @@
             this.div.appendChild(this._slider);
             this.min(1);
             this.max(100);
+            this.default(1);
         }
 
         min(value) {
+            if (value == null) value = 1;
             this._slider.min = value;
             return this;
         }
 
         max(value) {
+            if (value == null) value = 100;
             this._slider.max = value;
             return this;
         }
 
         default(value) {
+            if (value == null) value = 1;
             this._slider.value = value;
             return this;
         }
 
         style(style) {
+            if (style == null) style = juice.theme.style;
             function applySliderStyle(style,elem) {
                 var styles = style.split(' ');
                 if (styles.length == 1) {
@@ -432,22 +489,27 @@
         }
 
         text(string) {
+            if (string == null) string = '';
             this._input.value = string;
             return this;
         }
 
         placeholder(string) {
+            if (string == null) string = '';
             this._input.placeholder = string;
             return this;
         }
 
         style(style) {
+            if (style == null) style = juice.theme.style;
             applyStyle(style, this);
             return this;
         }
 
-        secret() {
-            this._input.type = 'password';
+        secret(string) {
+            if (string == null) var type = 'text';
+            else var type = 'password';
+            this._input.type = type;
             return this;
         }
     }
@@ -462,8 +524,8 @@
             this.style('flat rect');
         }
 
-        define(name) {
-            var w = super.define(name);
+        def(name) {
+            var w = super.def(name);
             this._pages.push(w);
             w.div.style.position = 'absolute';
             w.div.style.cssText += 'top:0px;bottom:0px;right:0px;left:0px;position:absolute;display:flex;-webkit-backface-visibility:hidden;';
@@ -519,6 +581,7 @@
         }
 
         transition(string) {
+            if (string == null) string = 'none';
             var self = this;
             this._pages.forEach(function(item, index, array) {item.div.style.transition = 'none';});
             this._pages.forEach(function(item, index, array) {self._show(item);});
@@ -546,6 +609,7 @@
         }
 
         style(style) {
+            if (style == null) style = juice.theme.style;
             applyStyle(style, this);
             return this;
         }
