@@ -130,8 +130,8 @@
         constructor() {
             this.div = document.createElement('div');
             this.div.style.cssText = 'display:flex;box-sizing:border-box;overflow:hidden;';
+            this._defaults = new DefaultDict([null]);
             this.color('none');
-            this._defaults = new DefaultDict(['default']);
             this._children = [];
             this._isConditional = false;
             this._conditionalMethods = this._get_conditional_methods();
@@ -215,6 +215,7 @@
         }
 
         if(string) {
+            this._defaultCSS = this.div.style.cssText;
             if (this._isConditional) throw 'Nested .if() not allowed.';
             this._condition = new Condition(string, this);
             var condition = this._condition;
@@ -292,7 +293,7 @@
         }
 
         width(string) {
-            if (string === 'default') string = '';
+            if (string === null) string = '';
             var size = this._parse_size_string(string, 'width');
             this._width = size;
             this.div.style.width = 'calc('+size+')';
@@ -300,7 +301,7 @@
         }
 
         height(string) {
-            if (string === 'default') string = '';
+            if (string === null) string = '';
             var size = this._parse_size_string(string, 'height');
             this._height = size;
             this.div.style.height = 'calc('+size+')';
@@ -308,7 +309,7 @@
         }
 
         flow(string) {
-            if (string === 'default') string = 'lr';
+            if (string === null) string = 'lr';
             var format = 'row';
             var dict = {
                 'topdown': 'column',
@@ -328,7 +329,7 @@
         }
 
         space(string) { // TODO: replace with flex gap
-            if (string === 'default') string = '';
+            if (string === null) string = '';
             if (string == 'between') this.div.style.justifyContent = 'space-between';
             else if (string == 'evenly') this.div.style.justifyContent = 'space-evenly';
             else if (string == 'around') this.div.style.justifyContent = 'space-around';
@@ -337,7 +338,7 @@
         }
 
         align(string) {
-            if (string === 'default') string = '';
+            if (string === null) string = '';
             if (string == 'center') this.div.style.alignItems = 'center';
             else if (string == 'left' || string == 'top') this.div.style.alignItems = 'flex-start';
             else if (string == 'right' || string == 'bottom') this.div.style.alignItems = 'flex-end';
@@ -352,19 +353,19 @@
         }
 
         gap(string) {
-            if (string === 'default') string = '';
+            if (string === null) string = '';
             this.div.style.gap = string;
             return this;
         }
 
         pad(string) {
-            if (string === 'default') string = '';
+            if (string === null) string = '';
             this.div.style.padding = string;
             return this;
         }
 
         padgap(string) {
-            if (string === 'default') string = '';
+            if (string === null) string = '';
             this.gap(string);
             //if (this._flow.includes('row')) this.pad('0px '+string);
             //else if (this._flow.includes('column')) this.pad(string+' 0px');
@@ -373,7 +374,7 @@
         }
 
         margin(string) {
-            if (string === 'default') string = '';
+            if (string === null) string = '';
             this.div.style.margin = string;
             return this;
         }
@@ -408,31 +409,32 @@
         }
 
         opacity(number) {
-            if (string === 'default') this.div.style.opacity = '';
+            if (string === null) this.div.style.opacity = '';
             this.div.style.opacity = number;
             return this;
         }
 
         hcenter(string) {
-            if (string === 'default') this.div.style.margin = '';
+            if (string === null) this.div.style.margin = '';
             this.div.style.margin = '0 auto';
             return this;
         }
 
         vcenter(string) {
-            if (string === 'default') this.div.style.margin = '';
+            if (string === null) this.div.style.margin = '';
             this.div.style.margin = 'auto 0';
             return this;
         }
 
         center(string) {
-            if (string === 'default') this.div.style.margin = '';
+            if (string === null) this.div.style.margin = '';
             this.div.style.margin = 'auto';
             return this;
         }
 
         css(string) {
-            this.div.style.cssText += string;
+            if (string == null) this.div.style.cssText = this._defaultCSS;
+            else this.div.style.cssText += string;
             return this;
         }
 
