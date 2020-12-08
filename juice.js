@@ -15,193 +15,121 @@
         isDesktop: function() {return !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)},
     };
 
-    juice.def = function() {
-        var w = new juice.Item();
-        w.div.style.width = '100vw';
-        w.div.style.height = '100vh';
-        w.div.style.flexDirection = 'row';
-        w._parent = document.body;
+    juice.def = function(componentClass) {
+        var graph = new Graph();
+        var proxy = new Proxy({}, {
+            get: function(target, fx, receiver) {
+                return function(...args) {
+                    graph.appendNode(fx,args);
+                    return proxy;
+                }
+            }
+        });
+        proxy.def(componentClass).css('width:100vw;height:100vh;flex-direction:row;');
         window.onload = function() {
             document.body.style.cssText = 'padding:0px;margin:0px;';
-            document.body.appendChild(w.div);
+            graph.render();
         };
-        return w;
+        return proxy;
     };
 
-    class DefaultDict {
-        constructor(defaultInit) {
-            return new Proxy({}, {
-                get: (target, name) => name in target ?
-                    target[name] :
-                    (target[name] = typeof defaultInit === 'function' ?
-                    new defaultInit().valueOf() :
-                    defaultInit)
-            })
+    juice.data = function(data) {
+
+    };
+
+    class Node {
+        constructor(fx, args) {
+            this.fx = fx;
+            this.args = args;
+            this.parent = undefined;
+            this.after = undefined;
+            this.branch = undefined;
+            this.branch_closed = false;
+            this.rendered_item = undefined;
+        }
+
+        render() {
+            if (this.fx == 'def') {
+                if (this.args[0] === undefined) var item = new juice.Item();
+                else {
+                    var className = this.args[0][0].toUpperCase() + this.args[0].slice(1).toLowerCase();
+                    if (!component.hasOwnProperty(className)) throw 'Component class "'+className+'" was not found.';
+                    var item = new component[className]();
+                    item.init();
+                }
+                this.rendered_item = item;
+                if (this.parent === undefined) document.body.appendChild(item.div);
+                else {
+                    this.parent.rendered_item.div.appendChild(item.div);
+                    this.parent.rendered_item._children.push(item);
+                    item._parent = this.parent.rendered_item;
+                    item.div.style.flexDirection = this.parent.rendered_item.div.style.flexDirection;
+                }
+                if (this.branch !== undefined) this.branch.render();
+            } else if (this.fx == 'if') {
+
+            } else if (this.fx == 'map') {
+
+            } else if (this.fx == 'repeat') {
+
+            } else if (this.fx == 'map') {
+
+            } else if (this.fx == 'map') {
+
+            } else {
+                this.parent.rendered_item[this.fx](...this.args);
+            }
+            if (this.after !== undefined) this.after.render();
+        }
+
+        append(node) {
+            if (node.fx == 'end') {
+                this.parent.branch_closed = true;
+                return this.parent;
+            }
+            if (this.fx == 'def' && !this.branch_closed) {
+                node.parent = this;
+                this.branch = node;
+            } else {
+                node.parent = this.parent;
+                this.after = node;
+            }
+            return node;
         }
     }
 
-    class Condition {
-        constructor(string, caller) {
-            var fx = this.parse(string, caller);
-            if (fx === undefined) throw '.if() condition "'+string+'" invalid.';
-            this.fx = [fx];
-            this.state = undefined;
-            this.dispatch = { // 0 = if, -1 = else, 1+ = elif
-                true:{'0': [], '-1':[]},
-                false:{'0': [], '-1':[]}
-            };
-            this.hasElse = false;
-            this.active_index = 0;
+    class Graph {
+        constructor() {
+            this.root = undefined;
+            this.tip = undefined;
+            this.id = 1;
         }
 
-        parse(string, caller) {
-
-            function grammar_1(object, is, orientation) {
-                if (object == 'this') var obj = caller;
-                else if (object == 'parent') var obj = caller._parent;
-                else if (object == 'device') var obj = juice.device;
-                else if (object in juice.slot) var obj = juice.slot[object];
-                else return undefined;
-                if (orientation == 'landscape') return function() {return obj._isLandscape();}
-                else if (orientation == 'portrait') return function() {return obj._isPortrait();}
-                else if (orientation == 'mobile' && object == 'device') return function() {return obj.isMobile();}
-                else if (orientation == 'desktop' && object == 'device') return function() {return obj.isDesktop();}
-                else return undefined;
-            }
-
-            function grammar_2(property, of, object, operator, size) {
-                if (object == 'this') var obj = caller;
-                else if (object == 'parent') var obj = caller._parent;
-                else if (object in juice.slot) var obj = juice.slot[object];
-                else return undefined;
-                if (size.includes('u')) size = size.replace(/u/, '*'+juice.gridsize+'px');
-                size = parseInt(size);
-                if (!property in ['width', 'height']) return undefined;
-                if (operator == '=') return function() {return (obj.div.getBoundingClientRect()[property] == size)};
-                if (operator == '>=') return function() {return (obj.div.getBoundingClientRect()[property] >= size)};
-                if (operator == '<=') return function() {return (obj.div.getBoundingClientRect()[property] <= size)};
-                if (operator == '>') return function() {return (obj.div.getBoundingClientRect()[property] > size)};
-                if (operator == '<') return function() {return (obj.div.getBoundingClientRect()[property] < size)};
-            }
-            if (/(\w+) is (landscape|portrait|mobile|desktop)/.test(string)) return grammar_1(...string.split(' '));
-            else if (/(width|height) of (\w+) (=|>=|<=|>|<) (\w+)/.test(string)) return grammar_2(...string.split(' '));
-            return undefined;
+        render(node) {
+            if (node === undefined) node = this.root;
+            node.render();
         }
 
-        check() {
-            var newState = '-1';
-            for (var i=this.fx.length-1; i>=0; i--) {
-                if (this.fx[i]()) newState = i;
-                if (this.state === undefined) this.dispatchEvent(false, i); // initally set all states to false
-            }
-            if (this.state === undefined && newState != '-1') this.dispatchEvent(false, i);
-            //if (newState != this.state) { //TODO: only evaluate once on change => problem: multiple .ifs() will not update when properties are overwritten by another .if()
-            if (this.state !== undefined) this.dispatchEvent(false, this.state);
-            this.dispatchEvent(true, newState);
-            this.state = newState;
-            return this.state;
+        appendNode(fx,args) {
+            var node = new Node(fx,args);
+            node.id = this.id;
+            this.id++;
+            if (this.root === undefined && this.tip === undefined) {
+                this.root = node;
+                this.tip = node;
+            } else this.tip = this.tip.append(node);
         }
+    };
 
-        addEventListener(event, fx) {
-            this.dispatch[event][this.active_index].push(fx);
-        }
-
-        dispatchEvent(event, id) {
-            for (var i=0; i<this.dispatch[event][id].length; i++) this.dispatch[event][id][i]();
-        }
-
-        else() {
-            this.active_index = '-1';
-        }
-
-        elif(string, caller) {
-            var fx = this.parse(string, caller);
-            if (fx === undefined) throw '.elif() condition "'+string+'" invalid.';
-            this.fx.push(fx);
-            this.active_index = this.fx.length-1;
-            this.dispatch[true][this.active_index] = [];
-            this.dispatch[false][this.active_index] = [];
-        }
-
-    }
 
     juice.Item = class {
 
         constructor() {
             this.div = document.createElement('div');
             this.div.style.cssText = 'display:flex;box-sizing:border-box;overflow:hidden;';
-            this._defaults = new DefaultDict([null]);
             this.color('none');
             this._children = [];
-            this._isConditional = false;
-            this._conditionalMethods = this._get_conditional_methods();
 
-            return new Proxy(this, { // TODO: replace proxy trap with decorators in next ES spec
-                get: function(target, property, receiver) {
-                    if (typeof target[property] === 'function' && target._conditionalMethods.includes(property)) {
-                        if (target._isConditional) {
-                            if (property == 'def') return new Proxy(target[property], {
-                                apply(applyTarget, thisArg, args) {
-                                    var node = Reflect.apply(applyTarget, thisArg, args);
-                                    // TODO: Maybe replace display:none with removing/appending DOM node? (problem is inserting at the same position again...)
-                                    receiver._condition.addEventListener(true, function () {node.div.style.display = 'flex';}, false);
-                                    receiver._condition.addEventListener(false, function () {node.div.style.display = 'none';}, false);
-                                    return node;
-                                }
-                            }); else return new Proxy(target[property], {
-                                apply(applyTarget, thisArg, args) {
-                                    receiver._condition.addEventListener(true, function () {Reflect.apply(applyTarget, thisArg, args)}, false);
-                                    receiver._condition.addEventListener(false, function () {Reflect.apply(applyTarget, thisArg, target._defaults[property])}, false);
-                                    return receiver;
-                                }
-                            });
-                        } else return new Proxy(target[property], {
-                            apply(applyTarget, thisArg, args) {
-                                target._defaults[property] = args;
-                                return Reflect.apply(applyTarget, thisArg, args);
-                            }
-                        });
-                    }
-                    return target[property];
-                }
-            });
-        }
-
-        _get_conditional_methods() {
-            var obj = this;
-            let props = []
-            do {
-                const l = Object.getOwnPropertyNames(obj)
-                    .concat(Object.getOwnPropertySymbols(obj).map(s => s.toString()))
-                    .sort()
-                    .filter((p, i, arr) =>
-                        typeof obj[p] === 'function' &&  //only the methods
-                        p !== 'constructor' &&           //not the constructor
-                        p !== 'init' &&                  //not init
-                        (i == 0 || p !== arr[i - 1]) &&  //not overriding in this prototype
-                        props.indexOf(p) === -1 &&       //not overridden in a child
-                        !p.startsWith('_') &&            //not private
-                        !/if|else|elif|fi/.test(p)       //not related to conditional mechanism
-                    )
-                props = props.concat(l)
-            } while ((obj = Object.getPrototypeOf(obj)) && Object.getPrototypeOf(obj))
-            return props
-        }
-
-        def(string) {
-            if (string == '') {
-                var w = new juice.Item();
-            } else {
-                var className = string[0].toUpperCase() + string.slice(1).toLowerCase();
-                if (!component.hasOwnProperty(className)) throw 'Component class "'+className+'" was not found.';
-                var w = new component[className]();
-                w.init();
-            }
-            w.div.style.flexDirection = this.div.style.flexDirection;
-            w._parent = this;
-            this.div.appendChild(w.div);
-            this._children.push(w);
-            return w;
         }
 
         _isPortrait() {
@@ -212,47 +140,6 @@
         _isLandscape() {
             if (this.div.getBoundingClientRect().height < this.div.getBoundingClientRect().width) return true;
             else return false;
-        }
-
-        if(string) {
-            this._defaultCSS = this.div.style.cssText;
-            if (this._isConditional) throw 'Nested .if() not allowed.';
-            this._condition = new Condition(string, this);
-            var condition = this._condition;
-            if (string.split(' ')[0] != 'device') new ResizeObserver(function() {return condition.check();}).observe(this.div);
-            this._isConditional = true;
-            window.addEventListener('load', (event) => {this._condition.check();}, {once: true});
-            return this;
-        }
-
-        elif(string) {
-            if (!this._isConditional) throw 'Using .elif() without .if()';
-            this._condition.elif(string, this);
-            return this;
-        }
-
-        else() {
-            if (!this._isConditional) throw 'Using .else() without .if()';
-            this._condition.else();
-            return this;
-        }
-
-        fi() {
-            if (!this._isConditional) throw 'Using .fi() without .if()';
-            this._isConditional = false;
-            return this;
-        }
-
-        repeat() {
-            return this;
-        }
-
-        insert(item) {
-            return this;
-        }
-
-        place(item) {
-            return this;
         }
 
         clear() {
@@ -405,6 +292,7 @@
             this.div.style.backgroundColor = color.normal;
             this.div.style.color = color.text;
             this._color = color;
+            this.__color = string;
             return this;
         }
 
