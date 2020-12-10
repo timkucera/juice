@@ -41,11 +41,12 @@
         constructor(fx, args) {
             this.fx = fx;
             this.args = args;
-            this.parent = undefined;
+            this.scope = {};
             this.after = undefined;
             this.branch = undefined;
             this.branch_closed = false;
             this.rendered_item = undefined;
+            this.conditions = [];
         }
 
         render() {
@@ -58,16 +59,26 @@
                     item.init();
                 }
                 this.rendered_item = item;
-                if (this.parent === undefined) document.body.appendChild(item.div);
+                if (this.scope.dom === undefined) document.body.appendChild(item.div);
                 else {
-                    this.parent.rendered_item.div.appendChild(item.div);
-                    this.parent.rendered_item._children.push(item);
-                    item._parent = this.parent.rendered_item;
-                    item.div.style.flexDirection = this.parent.rendered_item.div.style.flexDirection;
+                    this.scope.dom.rendered_item.div.appendChild(item.div);
+                    this.scope.dom.rendered_item._children.push(item);
+                    item._parent = this.scope.dom.rendered_item;
+                    item.div.style.flexDirection = this.scope.dom.rendered_item.div.style.flexDirection;
                 }
                 if (this.branch !== undefined) this.branch.render();
             } else if (this.fx == 'if') {
-
+                var else_condition = undefined;
+                var true_condition = undefined;
+                for (var c of this.conditions) {
+                    if (c.node.fx == 'else') else_condition = c.node.branch;
+                    else if (c.condition()) {
+                        true_condition = c.node.branch;
+                        break;
+                    }
+                }
+                if (true_condition != undefined) true_condition.render();
+                else if (else_condition != undefined) else_condition.render();
             } else if (this.fx == 'map') {
 
             } else if (this.fx == 'repeat') {
@@ -77,24 +88,75 @@
             } else if (this.fx == 'map') {
 
             } else {
-                this.parent.rendered_item[this.fx](...this.args);
+                this.scope.dom.rendered_item[this.fx](...this.args);
             }
             if (this.after !== undefined) this.after.render();
         }
 
         append(node) {
-            if (node.fx == 'end') {
-                this.parent.branch_closed = true;
-                return this.parent;
+            if (node.fx == 'if') node.scope.if = node;
+            else node.scope.if = this.scope.if;
+            if (['if','elif','else'].includes(node.fx)) node.scope.if.conditions.push({
+                condition: this.parseCondition(node),
+                node: node,
+            });
+
+            if (this.fx == 'def' && !this.branch_closed) node.scope.dom = this;
+            else node.scope.dom = this.scope.dom;
+
+            if (['end','elif','else'].includes(node.fx)) {
+                this.scope.graph.branch_closed = true;
+                if (node.fx == 'end') return this.scope.graph;
+                else {
+                    node.scope.graph = this.scope.graph;
+                    return node;
+                }
             }
-            if (this.fx == 'def' && !this.branch_closed) {
-                node.parent = this;
+
+            if (['def','if','elif','else'].includes(this.fx) && !this.branch_closed) {
+                node.scope.graph = this;
                 this.branch = node;
             } else {
-                node.parent = this.parent;
+                node.scope.graph = this.scope.graph;
                 this.after = node;
             }
             return node;
+        }
+
+        parseCondition(targetNode, string) {
+            var string = targetNode.args[0];
+            function grammar_1(object, is, orientation) {
+                var caller = () => {return targetNode.scope.if.scope.dom.rendered_item};
+                if (object == 'this') var obj = () => {return caller()};
+                else if (object == 'parent') var obj = () => {return caller()._parent};
+                else if (object == 'device') var obj = () => {return juice.device};
+                else if (object in juice.slot) var obj = () => {return juice.slot[object]};
+                else return undefined;
+                if (orientation == 'landscape') return function() {return obj()._isLandscape();}
+                else if (orientation == 'portrait') return function() {return obj()._isPortrait();}
+                else if (orientation == 'mobile' && object == 'device') return function() {return obj().isMobile();}
+                else if (orientation == 'desktop' && object == 'device') return function() {return obj().isDesktop();}
+                else return undefined;
+            }
+
+            function grammar_2(property, of, object, operator, size) {
+                var caller = () => {return targetNode.scope.if.scope.dom.rendered_item.div};
+                if (object == 'this') var obj = () => {return caller()};
+                else if (object == 'parent') var obj = () => {return caller()._parent};
+                else if (object in juice.slot) var obj = () => {return juice.slot[object]};
+                else return undefined;
+                if (size.includes('u')) size = size.replace(/u/, '*'+juice.gridsize+'px');
+                size = parseInt(size);
+                if (!property in ['width', 'height']) return undefined;
+                if (operator == '=') return function() {return (obj().div.getBoundingClientRect()[property] == size)};
+                if (operator == '>=') return function() {return (obj().div.getBoundingClientRect()[property] >= size)};
+                if (operator == '<=') return function() {return (obj().div.getBoundingClientRect()[property] <= size)};
+                if (operator == '>') return function() {return (obj().div.getBoundingClientRect()[property] > size)};
+                if (operator == '<') return function() {return (obj().div.getBoundingClientRect()[property] < size)};
+            }
+            if (/(\w+) is (landscape|portrait|mobile|desktop)/.test(string)) return grammar_1(...string.split(' '));
+            else if (/(width|height) of (\w+) (=|>=|<=|>|<) (\w+)/.test(string)) return grammar_2(...string.split(' '));
+            return undefined;
         }
     }
 
@@ -102,7 +164,6 @@
         constructor() {
             this.root = undefined;
             this.tip = undefined;
-            this.id = 1;
         }
 
         render(node) {
@@ -112,8 +173,6 @@
 
         appendNode(fx,args) {
             var node = new Node(fx,args);
-            node.id = this.id;
-            this.id++;
             if (this.root === undefined && this.tip === undefined) {
                 this.root = node;
                 this.tip = node;
