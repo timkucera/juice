@@ -15,6 +15,14 @@
         isDesktop: function() {return !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)},
     };
 
+    juice.eventListeners = {'load': []};
+    juice.addEventListener = function(event, fx) {
+        juice.eventListeners[event].push(fx);
+    }
+    juice.dispatchEvent = function(event) {
+        for (var fx of juice.eventListeners[event]) fx();
+    }
+
     juice.def = function(componentClass) {
         var graph = new Graph();
         var proxy = new Proxy({}, {
@@ -29,6 +37,7 @@
         window.onload = function() {
             document.body.style.cssText = 'padding:0px;margin:0px;';
             graph.render();
+            juice.dispatchEvent('load');
         };
         return proxy;
     };
@@ -234,6 +243,7 @@
                 if (string[0] == '/') string = '100%'+string;
                 if (string.includes('u')) string = string.replace(/u/, '*'+juice.gridsize+'px');
                 if (string.includes('-')) string = string.replace(/-/, ' - ');
+                string += ' + 0.5px'; // hack to avoid shaking on css transition as per https://stackoverflow.com/questions/53094304/inner-div-oscillates-when-using-a-css-transition-on-the-parent-div
             }
             return string;
         }
