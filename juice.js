@@ -10,12 +10,20 @@
         style: 'flat',
     };
 
-    juice.device = {
+    var DEVICE = {
         isMobile: function() {return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)},
         isDesktop: function() {return !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)},
     };
 
-    juice.eventListeners = {'load': []};
+    class DefaultDict {
+        constructor(defaultVal) {
+            return new Proxy({}, {
+                get: (target, name) => name in target ? target[name] : defaultVal
+            })
+        }
+    }
+
+    juice.eventListeners = new DefaultDict([]);
     juice.addEventListener = function(event, fx) {
         juice.eventListeners[event].push(fx);
     }
@@ -54,61 +62,22 @@
             this.after = undefined;
             this.branch = undefined;
             this.branch_closed = false;
+            this.rendered = false;
             this.rendered_item = undefined;
             this.conditions = [];
-        }
-
-        render() {
-            if (this.fx == 'def') {
-                if (this.args[0] === undefined) var item = new juice.Item();
-                else {
-                    var className = this.args[0][0].toUpperCase() + this.args[0].slice(1).toLowerCase();
-                    if (!component.hasOwnProperty(className)) throw 'Component class "'+className+'" was not found.';
-                    var item = new component[className]();
-                    item.init();
-                }
-                this.rendered_item = item;
-                if (this.scope.dom === undefined) document.body.appendChild(item.div);
-                else {
-                    this.scope.dom.rendered_item.div.appendChild(item.div);
-                    this.scope.dom.rendered_item._children.push(item);
-                    item._parent = this.scope.dom.rendered_item;
-                    item.div.style.flexDirection = this.scope.dom.rendered_item.div.style.flexDirection;
-                }
-                if (this.branch !== undefined) this.branch.render();
-            } else if (this.fx == 'if') {
-                var else_condition = undefined;
-                var true_condition = undefined;
-                for (var c of this.conditions) {
-                    if (c.node.fx == 'else') else_condition = c.node.branch;
-                    else if (c.condition()) {
-                        true_condition = c.node.branch;
-                        break;
-                    }
-                }
-                if (true_condition != undefined) true_condition.render();
-                else if (else_condition != undefined) else_condition.render();
-            } else if (this.fx == 'map') {
-
-            } else if (this.fx == 'repeat') {
-
-            } else if (this.fx == 'map') {
-
-            } else if (this.fx == 'map') {
-
-            } else {
-                this.scope.dom.rendered_item[this.fx](...this.args);
-            }
-            if (this.after !== undefined) this.after.render();
+            this.conditionNodes = [];
+            this.conditionState = undefined;
+            this.events = new DefaultDict([]);
         }
 
         append(node) {
+            if (node.fx == 'slot') {
+                juice.slot[node.args[0]] = this;
+                return this;
+            }
             if (node.fx == 'if') node.scope.if = node;
             else node.scope.if = this.scope.if;
-            if (['if','elif','else'].includes(node.fx)) node.scope.if.conditions.push({
-                condition: this.parseCondition(node),
-                node: node,
-            });
+            if (['if','elif','else'].includes(node.fx)) node.scope.if.conditionNodes.push(node);
 
             if (this.fx == 'def' && !this.branch_closed) node.scope.dom = this;
             else node.scope.dom = this.scope.dom;
@@ -117,6 +86,7 @@
                 this.scope.graph.branch_closed = true;
                 if (node.fx == 'end') return this.scope.graph;
                 else {
+                    this.scope.graph.after = node;
                     node.scope.graph = this.scope.graph;
                     return node;
                 }
@@ -132,40 +102,120 @@
             return node;
         }
 
-        parseCondition(targetNode, string) {
-            var string = targetNode.args[0];
-            function grammar_1(object, is, orientation) {
-                var caller = () => {return targetNode.scope.if.scope.dom.rendered_item};
-                if (object == 'this') var obj = () => {return caller()};
-                else if (object == 'parent') var obj = () => {return caller()._parent};
-                else if (object == 'device') var obj = () => {return juice.device};
-                else if (object in juice.slot) var obj = () => {return juice.slot[object]};
-                else return undefined;
-                if (orientation == 'landscape') return function() {return obj()._isLandscape();}
-                else if (orientation == 'portrait') return function() {return obj()._isPortrait();}
-                else if (orientation == 'mobile' && object == 'device') return function() {return obj().isMobile();}
-                else if (orientation == 'desktop' && object == 'device') return function() {return obj().isDesktop();}
-                else return undefined;
-            }
+        dispatchEvent(event) {
+            for (var fx of this.events[event]) fx();
+            for (var fx of this.events['any']) fx();
+        }
 
-            function grammar_2(property, of, object, operator, size) {
-                var caller = () => {return targetNode.scope.if.scope.dom.rendered_item.div};
-                if (object == 'this') var obj = () => {return caller()};
-                else if (object == 'parent') var obj = () => {return caller()._parent};
-                else if (object in juice.slot) var obj = () => {return juice.slot[object]};
-                else return undefined;
-                if (size.includes('u')) size = size.replace(/u/, '*'+juice.gridsize+'px');
-                size = parseInt(size);
-                if (!property in ['width', 'height']) return undefined;
-                if (operator == '=') return function() {return (obj().div.getBoundingClientRect()[property] == size)};
-                if (operator == '>=') return function() {return (obj().div.getBoundingClientRect()[property] >= size)};
-                if (operator == '<=') return function() {return (obj().div.getBoundingClientRect()[property] <= size)};
-                if (operator == '>') return function() {return (obj().div.getBoundingClientRect()[property] > size)};
-                if (operator == '<') return function() {return (obj().div.getBoundingClientRect()[property] < size)};
+        addEventListener(event, fx) {
+            if (!this.events[event].includes(fx)) this.events[event].push(fx);
+        }
+
+        render() {
+            if (this.scope.dom != undefined && !this.scope.dom.rendered) this.scope.dom.render();
+            if (this.rendered) return;
+            this.rendered = true;
+            if (this.fx == 'def') this.addNewItem();
+            else if (this.fx == 'if') {
+                for (var node of this.conditionNodes) this.installCondition(node);
+                this.checkConditions();
+            } else if (this.fx == 'repeat') {
+
+            } else if (this.fx == 'map') {
+
+            } else if (this.fx == 'insert') {
+
+            } else if (this.fx == 'map') {
+
+            } else if (!['else','elif'].includes(this.fx)) {
+                this.scope.dom.rendered_item[this.fx](...this.args);
             }
-            if (/(\w+) is (landscape|portrait|mobile|desktop)/.test(string)) return grammar_1(...string.split(' '));
-            else if (/(width|height) of (\w+) (=|>=|<=|>|<) (\w+)/.test(string)) return grammar_2(...string.split(' '));
-            return undefined;
+            if (this.after !== undefined) this.after.render();
+            //else {console.log('renderend');this.dispatchEvent('renderEnd');}
+        }
+
+        unrender() {
+            if (!this.rendered) return;
+            if (this.fx == 'def') {
+                if (this.scope.dom === undefined) document.body.removeChild(this.rendered_item.div);
+                else this.scope.dom.rendered_item.div.removeChild(this.rendered_item.div);
+                this.rendered_item.resizeObserver.disconnect();
+                this.rendered_item.resizeObserver = undefined;
+                this.rendered_item = undefined;
+                function propagate(node) {
+                    node.rendered = false;
+                    if (node.after !== undefined) propagate(node.after);
+                    if (node.branch !== undefined) propagate(node.branch);
+                }
+                propagate(this);
+            } else this.scope.dom.unrender();
+        }
+
+        addNewItem() {
+            if (this.args[0] === undefined) var item = new juice.Item();
+            else {
+                var className = this.args[0][0].toUpperCase() + this.args[0].slice(1).toLowerCase();
+                if (!component.hasOwnProperty(className)) throw 'Component class "'+className+'" was not found.';
+                var item = new component[className]();
+                item.init();
+            }
+            var self = this;
+            item.resizeObserver = new ResizeObserver(()=>{self.dispatchEvent('resize');});
+            item.resizeObserver.observe(item.div);
+            this.rendered_item = item;
+            if (this.scope.dom === undefined) document.body.appendChild(item.div);
+            else {
+                this.scope.dom.rendered_item.div.appendChild(item.div);
+                item.div.style.flexDirection = this.scope.dom.rendered_item.div.style.flexDirection;
+            }
+            if (this.branch !== undefined) this.branch.render();
+        }
+
+        installCondition(conditionalNode) {
+            var string = conditionalNode.args[0];
+            if (string !== undefined) {
+                if (/(\w+) is (landscape|portrait|mobile|desktop)/.test(string)) {
+                    var [object, is, orientation] = string.split(' ');
+                    if (orientation == 'landscape') var evaluation = function(node) {return node.rendered_item._isLandscape();}
+                    else if (orientation == 'portrait') var evaluation = function(node) {return node.rendered_item._isPortrait();}
+                    else if (orientation == 'mobile' && object == 'device') var evaluation = function(node) {return node.rendered_item.isMobile();}
+                    else if (orientation == 'desktop' && object == 'device') var evaluation = function(node) {return node.rendered_item.isDesktop();}
+                } else if (/(width|height) of (\w+) (=|>=|<=|>|<) (\w+)/.test(string)) {
+                    var [property, of, object, operator, size] = string.split(' ');
+                    if (size.includes('u')) size = size.replace(/u/, '*'+juice.gridsize+'px');
+                    size = parseInt(size);
+                    if (operator == '=') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] == size)};
+                    if (operator == '>=') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] >= size)};
+                    if (operator == '<=') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] <= size)};
+                    if (operator == '>') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] > size)};
+                    if (operator == '<') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] < size)};
+                }
+                if (object == 'this') var triggerNode = conditionalNode.scope.dom;
+                else if (object == 'parent') var triggerNode = conditionalNode.scope.dom.scope.dom;
+                else if (object == 'device') var triggerNode = DEVICE;
+                else if (object in juice.slot) var triggerNode = juice.slot[object];
+                var fx = function() {return evaluation(triggerNode);}
+                triggerNode.addEventListener('any',this.checkConditions.bind(this));
+            } else var fx = undefined;
+            this.conditions.push({node: conditionalNode, fx: fx});
+        }
+
+        checkConditions() {
+            var else_condition = undefined;
+            var true_condition = undefined;
+            for (var condition of this.conditions) {
+                if (condition.node.fx == 'else') else_condition = condition.node.branch;
+                else if (condition.fx()) {
+                    true_condition = condition.node.branch;
+                    break;
+                }
+            }
+            var new_condition = true_condition || else_condition;
+            if (this.conditionState != new_condition) {
+                if (this.conditionState !== undefined) this.conditionState.unrender();
+                this.conditionState = new_condition;
+                new_condition.render();
+            }
         }
     }
 
@@ -196,7 +246,6 @@
             this.div = document.createElement('div');
             this.div.style.cssText = 'display:flex;box-sizing:border-box;overflow:hidden;';
             this.color('none');
-            this._children = [];
         }
 
         _isPortrait() {
@@ -328,11 +377,6 @@
         on(event, signal, ...args) {
             if (typeof signal === "function") this.div.addEventListener(event, signal);
             else this.div.addEventListener(event, function(e){juice.signal[signal](e,...args)});
-            return this;
-        }
-
-        slot(name) {
-            juice.slot[name] = this;
             return this;
         }
 
