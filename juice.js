@@ -103,12 +103,12 @@
         }
 
         dispatchEvent(event) {
-            for (var fx of this.events[event]) fx();
-            for (var fx of this.events['any']) fx();
+            for (var [node,fx] of this.events[event]) node[fx]();
+            for (var [node,fx] of this.events['any']) node[fx]();
         }
 
-        addEventListener(event, fx) {
-            if (!this.events[event].includes(fx)) this.events[event].push(fx);
+        addEventListener(event,node,fx) {
+            if (!this.events[event].some(([n,f]) => n == node && f == fx)) this.events[event].push([node,fx]);
         }
 
         render() {
@@ -131,7 +131,6 @@
                 this.scope.dom.rendered_item[this.fx](...this.args);
             }
             if (this.after !== undefined) this.after.render();
-            //else {console.log('renderend');this.dispatchEvent('renderEnd');}
         }
 
         unrender() {
@@ -195,7 +194,7 @@
                 else if (object == 'device') var triggerNode = DEVICE;
                 else if (object in juice.slot) var triggerNode = juice.slot[object];
                 var fx = function() {return evaluation(triggerNode);}
-                triggerNode.addEventListener('any',this.checkConditions.bind(this));
+                triggerNode.addEventListener('any',this,'checkConditions');
             } else var fx = undefined;
             this.conditions.push({node: conditionalNode, fx: fx});
         }
