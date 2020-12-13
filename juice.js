@@ -32,11 +32,11 @@
     }
 
     juice.def = function(componentClass) {
-        var graph = new Graph();
+        juice.graph = new Graph();
         var proxy = new Proxy({}, {
             get: function(target, fx, receiver) {
                 return function(...args) {
-                    graph.appendNode(fx,args);
+                    juice.graph.appendNode(fx,args);
                     return proxy;
                 }
             }
@@ -44,14 +44,17 @@
         proxy.def(componentClass).css('width:100vw;height:100vh;flex-direction:row;');
         window.onload = function() {
             document.body.style.cssText = 'padding:0px;margin:0px;';
-            graph.render();
+            juice.graph.render();
             juice.dispatchEvent('load');
         };
         return proxy;
     };
 
     juice.data = function(data) {
-
+        return new Proxy(data, {
+            //set: dispatch change event
+            //get:
+        });
     };
 
     class Node {
@@ -70,38 +73,6 @@
             this.events = new DefaultDict([]);
         }
 
-        append(node) {
-            if (node.fx == 'slot') {
-                juice.slot[node.args[0]] = this;
-                return this;
-            }
-            if (node.fx == 'if') node.scope.if = node;
-            else node.scope.if = this.scope.if;
-            if (['if','elif','else'].includes(node.fx)) node.scope.if.conditionNodes.push(node);
-
-            if (this.fx == 'def' && !this.branch_closed) node.scope.dom = this;
-            else node.scope.dom = this.scope.dom;
-
-            if (['end','elif','else'].includes(node.fx)) {
-                this.scope.graph.branch_closed = true;
-                if (node.fx == 'end') return this.scope.graph;
-                else {
-                    this.scope.graph.after = node;
-                    node.scope.graph = this.scope.graph;
-                    return node;
-                }
-            }
-
-            if (['def','if','elif','else'].includes(this.fx) && !this.branch_closed) {
-                node.scope.graph = this;
-                this.branch = node;
-            } else {
-                node.scope.graph = this.scope.graph;
-                this.after = node;
-            }
-            return node;
-        }
-
         dispatchEvent(event) {
             for (var [node,fx] of this.events[event]) node[fx]();
             for (var [node,fx] of this.events['any']) node[fx]();
@@ -109,6 +80,50 @@
 
         addEventListener(event,node,fx) {
             if (!this.events[event].some(([n,f]) => n == node && f == fx)) this.events[event].push([node,fx]);
+        }
+
+        append(node) {
+            if (node.fx == 'slot') juice.slot[node.args[0]] = this;
+
+            if (this.fx == 'def' && !this.branch_closed) node.scope.dom = this;
+            else node.scope.dom = this.scope.dom;
+
+            if (node.fx == 'map') node.scope.map = node;
+            else node.scope.map = this.scope.map;
+
+            if (node.fx == 'if') node.scope.if = node;
+            else node.scope.if = this.scope.if;
+            if (['if','elif','else'].includes(node.fx)) node.scope.if.conditionNodes.push(node);
+
+            if (['elif','else'].includes(node.fx)) {
+                this.scope.graph.branch_closed = true;
+                this.scope.graph.after = node;
+                node.scope.graph = node;
+                return node;
+            }
+
+            if (['def','if','elif','else','map'].includes(this.fx) && !this.branch_closed) {
+                node.scope.graph = this;
+                this.branch = node;
+            } else {
+                node.scope.graph = this.scope.graph;
+                this.after = node;
+            }
+            if (node.fx == 'end') {
+                this.scope.graph.branch_closed = true;
+                return this.scope.graph;
+            } else return node;
+        }
+
+        ravel() {
+            var chain = [];
+            function addNode(node) {
+                chain.push([node.fx,node.args]);
+                if (node.branch != undefined) addNode(node.branch);
+                if (node.after != undefined) addNode(node.after);
+            }
+            addNode(this);
+            return chain;
         }
 
         render() {
@@ -119,15 +134,15 @@
             else if (this.fx == 'if') {
                 for (var node of this.conditionNodes) this.installCondition(node);
                 this.checkConditions();
-            } else if (this.fx == 'repeat') {
-
             } else if (this.fx == 'map') {
+                var chain = this.branch.ravel();
+            } else if (this.fx == 'repeat') {
 
             } else if (this.fx == 'insert') {
 
-            } else if (this.fx == 'map') {
-
-            } else if (!['else','elif'].includes(this.fx)) {
+            } else if (['end','else','elif','slot'].includes(this.fx)) {
+                // do  nothing
+            } else {
                 this.scope.dom.rendered_item[this.fx](...this.args);
             }
             if (this.after !== undefined) this.after.render();
@@ -143,8 +158,8 @@
                 this.rendered_item = undefined;
                 function propagate(node) {
                     node.rendered = false;
-                    if (node.after !== undefined) propagate(node.after);
                     if (node.branch !== undefined) propagate(node.branch);
+                    if (node.after !== undefined) propagate(node.after);
                 }
                 propagate(this);
             } else this.scope.dom.unrender();
@@ -219,9 +234,10 @@
     }
 
     class Graph {
-        constructor() {
+        constructor(arr) {
             this.root = undefined;
             this.tip = undefined;
+            if (arr !== undefined) for (var [fx,args] of arr) this.appendNode(fx,args);
         }
 
         render(node) {
@@ -377,10 +393,6 @@
             if (typeof signal === "function") this.div.addEventListener(event, signal);
             else this.div.addEventListener(event, function(e){juice.signal[signal](e,...args)});
             return this;
-        }
-
-        end() {
-            return this._parent;
         }
 
         color(string) {
