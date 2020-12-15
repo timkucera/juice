@@ -535,6 +535,11 @@
             return this;
         }
 
+        wrap() {
+            this.div.style.flexWrap = 'wrap';
+            return this;
+        }
+
         css(string) {
             this.div.style.cssText += string;
             return this;
