@@ -51,10 +51,65 @@
     };
 
     juice.data = function(data) {
-        return new Proxy(data, {
+        data = Object(data);
+        data._events = new DefaultDict([]);
+        data.dispatchEvent = function(event) {
+            for (var [node,fx] of this._events[event]) node[fx]();
+            for (var [node,fx] of this._events['any']) node[fx]();
+        }
+        data.addEventListener = function(event,node,fx) {
+            if (!this._events[event].some(([n,f]) => n == node && f == fx)) this._events[event].push([node,fx]);
+        }
+        for (const [key, value] of Object.entries(data)) {
+            if (!['addEventListener','dispatchEvent','_events'].includes(key) && Array.isArray(value)) data[key] = new Proxy(data[key], {
+                apply: function(target, thisArg, argumentsList) {
+                    data.dispatchEvent('change');
+                    return thisArg[target].apply(this, argumentList);
+                },
+                deleteProperty: function(target, property) {
+                    data.dispatchEvent('change');
+                    return true;
+                },
+                set: function(target, property, value, receiver) {
+                    target[property] = value;
+                    data.dispatchEvent('change');
+                    return true;
+                }
+            });
+        }
+        var proxy =  new Proxy(data, {
             //set: dispatch change event
-            //get:
+            set: function(obj, prop, value) {
+                if (Array.isArray(value)) value = new Proxy(array, {
+                    apply: function(target, thisArg, argumentsList) {
+                        console.log('change lvl 2a detected');
+                        return thisArg[target].apply(this, argumentList);
+                    },
+                    deleteProperty: function(target, property) {
+                        console.log('change lvl 2b detected');
+                        obj.dispatchEvent('change');
+                        return true;
+                    },
+                    set: function(target, property, value, receiver) {
+                        target[property] = value;
+                        console.log('change lvl 2c detected');
+                        obj.dispatchEvent('change');
+                        return true;
+                    }
+                });
+                obj[prop] = value;
+                obj.dispatchEvent('change');
+            },
+            get: function (target, prop, receiver) {
+                if (prop == '_length') return Math.max(...Object.entries(target).map(([k,v]) => Array.isArray(v) ? v.length : 1));
+                else if (target.hasOwnProperty(prop) && !['addEventListener','dispatchEvent','_events'].includes(prop)) return {
+                    data: receiver,
+                    get: () => target[prop],
+                }
+                else return target[prop];
+            },
         });
+        return proxy;
     };
 
     class Node {
@@ -88,9 +143,6 @@
             if (this.fx == 'def' && !this.branch_closed) node.scope.dom = this;
             else node.scope.dom = this.scope.dom;
 
-            if (node.fx == 'map') node.scope.map = node;
-            else node.scope.map = this.scope.map;
-
             if (node.fx == 'if') node.scope.if = node;
             else node.scope.if = this.scope.if;
             if (['if','elif','else'].includes(node.fx)) node.scope.if.conditionNodes.push(node);
@@ -117,13 +169,32 @@
 
         ravel() {
             var chain = [];
+            var rootNode = this;
             function addNode(node) {
                 chain.push([node.fx,node.args]);
                 if (node.branch != undefined) addNode(node.branch);
-                if (node.after != undefined) addNode(node.after);
+                if (node.after != undefined && node != rootNode) addNode(node.after);
             }
-            addNode(this);
+            addNode(rootNode);
             return chain;
+        }
+
+        clone() {
+            var chain = this.ravel();
+            return this.fromChain(chain);
+        }
+
+        fromChain(chain) {
+            var clone_root = undefined;
+            var clone_tip = undefined;
+            for (var [fx,args] of chain) {
+                var node = new Node(fx,args);
+                if (clone_root === undefined && clone_tip === undefined) {
+                    clone_root = node;
+                    clone_tip = node;
+                } else clone_tip = clone_tip.append(node);
+            }
+            return clone_root;
         }
 
         render() {
@@ -135,7 +206,23 @@
                 for (var node of this.conditionNodes) this.installCondition(node);
                 this.checkConditions();
             } else if (this.fx == 'map') {
-                var chain = this.branch.ravel();
+                var data = this.args[0];
+                for (var i=0; i<data._length; i++) {
+                    var chain = this.branch.ravel().map(([fx,args]) => {
+                        var datapiece = args[0];
+                        if (!!datapiece && Object.prototype.toString.call(datapiece) == "[object Object]" && datapiece.hasOwnProperty('data') && datapiece.data === data) {
+                            var value = datapiece.get();
+                            if (Array.isArray(value)) return [fx,[value[i]]];
+                            else return [fx,[value]];
+                        }
+                        else return [fx,args];
+                    });
+                    var node = this.fromChain(chain);
+                    node.scope.dom = this.scope.dom;
+                    node.render();
+                }
+                data.addEventListener('change',this,'rerender');
+
             } else if (this.fx == 'repeat') {
 
             } else if (this.fx == 'insert') {
@@ -163,6 +250,11 @@
                 }
                 propagate(this);
             } else this.scope.dom.unrender();
+        }
+
+        rerender() {
+            this.unrender();
+            this.render()
         }
 
         addNewItem() {
@@ -304,11 +396,23 @@
             } else {
                 if (string[0] == '-') string = '100%'+string;
                 if (string[0] == '/') string = '100%'+string;
-                if (string.includes('u')) string = string.replace(/u/, '*'+juice.gridsize+'px');
+                if (string.includes('u')) string = string.replace(/u/, ' * '+juice.gridsize+'px');
                 if (string.includes('-')) string = string.replace(/-/, ' - ');
                 string += ' + 0.5px'; // hack to avoid shaking on css transition as per https://stackoverflow.com/questions/53094304/inner-div-oscillates-when-using-a-css-transition-on-the-parent-div
             }
             return string;
+        }
+
+        _parse_font_size = function(string) {
+            if (string == '' || string == 'normal') return '12px';
+            else if (string == 'big') return '16px';
+            else if (string == 'verybig') return '22px';
+            else if (string == 'huge') return '34px';
+            else if (string == 'enormous') return '72px';
+            else if (string == 'small') return '10px';
+            else if (string == 'verysmall') return '9px';
+            else if (string == 'tiny') return '7px';
+            else return string;
         }
 
         width(string) {
@@ -367,11 +471,13 @@
         }
 
         gap(string) {
+            if (string.includes('u')) string = 'calc('+string.replace(/u/, ' * '+juice.gridsize+'px')+')';
             this.div.style.gap = string;
             return this;
         }
 
         pad(string) {
+            if (string.includes('u')) string = 'calc('+string.replace(/u/, ' * '+juice.gridsize+'px')+')';
             this.div.style.padding = string;
             return this;
         }

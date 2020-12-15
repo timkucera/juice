@@ -290,7 +290,7 @@
         }
 
         fontsize(string) {
-            this.div.style.cssText += 'font-size:'+string+';';
+            this.div.style.cssText += 'font-size:'+this._parse_font_size(string)+';';
             return this;
         }
 
