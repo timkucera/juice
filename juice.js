@@ -78,22 +78,19 @@
             });
         }
         var proxy =  new Proxy(data, {
-            //set: dispatch change event
             set: function(obj, prop, value) {
-                if (Array.isArray(value)) value = new Proxy(array, {
+                if (!['addEventListener','dispatchEvent','_events'].includes(prop) && Array.isArray(value)) data[prop] = new Proxy(data[prop], {
                     apply: function(target, thisArg, argumentsList) {
-                        console.log('change lvl 2a detected');
+                        data.dispatchEvent('change');
                         return thisArg[target].apply(this, argumentList);
                     },
                     deleteProperty: function(target, property) {
-                        console.log('change lvl 2b detected');
-                        obj.dispatchEvent('change');
+                        data.dispatchEvent('change');
                         return true;
                     },
                     set: function(target, property, value, receiver) {
                         target[property] = value;
-                        console.log('change lvl 2c detected');
-                        obj.dispatchEvent('change');
+                        data.dispatchEvent('change');
                         return true;
                     }
                 });
@@ -102,10 +99,6 @@
             },
             get: function (target, prop, receiver) {
                 if (prop == '_length') return Math.max(...Object.entries(target).map(([k,v]) => Array.isArray(v) ? v.length : 1));
-                else if (target.hasOwnProperty(prop) && !['addEventListener','dispatchEvent','_events'].includes(prop)) return {
-                    data: receiver,
-                    get: () => target[prop],
-                }
                 else return target[prop];
             },
         });
@@ -210,10 +203,9 @@
                 for (var i=0; i<data._length; i++) {
                     var chain = this.branch.ravel().map(([fx,args]) => {
                         var datapiece = args[0];
-                        if (!!datapiece && Object.prototype.toString.call(datapiece) == "[object Object]" && datapiece.hasOwnProperty('data') && datapiece.data === data) {
-                            var value = datapiece.get();
-                            if (Array.isArray(value)) return [fx,[value[i]]];
-                            else return [fx,[value]];
+                        if (Object.keys(data).some(k => data[k] === datapiece)) {
+                            if (Array.isArray(datapiece)) return [fx,[datapiece[i]]];
+                            else return [fx,[datapiece]];
                         }
                         else return [fx,args];
                     });
