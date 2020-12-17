@@ -205,6 +205,7 @@
                         var datapiece = args[0];
                         if (Object.keys(data).some(k => data[k] === datapiece)) {
                             if (Array.isArray(datapiece)) return [fx,[datapiece[i]]];
+                            else if (datapiece && {}.toString.call(datapiece) === '[object Function]') return [fx,[datapiece(i)]];
                             else return [fx,[datapiece]];
                         }
                         else return [fx,args];
