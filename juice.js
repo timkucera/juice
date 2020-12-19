@@ -50,58 +50,137 @@
         return proxy;
     };
 
+    juice.$this = {};
+    juice.$parent = {};
+    juice.$device = {};
+
+    juice.operator = class {
+        constructor(value) {
+            this.datas = [];
+            this.evals = [[]];
+            this.$makeLeft(value);
+        }
+        $eval() {
+            for (var or of this.evals) {
+                var result = true;
+                for (var fx of or) result = result && fx();
+                if (result) return true;
+            }
+            return false;
+        }
+        $makeLeft(value) {
+            if (value.$data !== undefined) {
+                this.datas.push(value.$data);
+                if (value.$key !== undefined) this.left = ()=>value.$data[value.$key];
+                else this.left = ()=>value.$data;
+            } else {
+                this.datas.push(value);
+                this.left = ()=>value;
+            }
+        }
+        $makeRight(value) {
+            if (value.$data !== undefined) {
+                if (value.$key !== undefined) return ()=>value.$data[value.$key];
+                else return ()=>value.$data;
+            } else return ()=>value;
+        }
+        eq(value) {
+            var left = this.left;
+            var right = this.$makeRight(value);
+            this.evals[this.evals.length-1].push(()=>left() == right());
+            return this;
+        }
+        ne(value) {
+            var left = this.left;
+            var right = this.$makeRight(value);
+            this.evals[this.evals.length-1].push(()=>left() != right());
+            return this;
+        }
+        lt(value) {
+            var left = this.left;
+            var right = this.$makeRight(value);
+            this.evals[this.evals.length-1].push(()=>left() < right());
+            return this;
+        }
+        gt(value) {
+            var left = this.left;
+            var right = this.$makeRight(value);
+            this.evals[this.evals.length-1].push(()=>left() > right());
+            return this;
+        }
+        le(value) {
+            var left = this.left;
+            var right = this.$makeRight(value);
+            this.evals[this.evals.length-1].push(()=>left() <= right());
+            return this;
+        }
+        ge(value) {
+            var left = this.left;
+            var right = this.$makeRight(value);
+            this.evals[this.evals.length-1].push(()=>left() >= right());
+            return this;
+        }
+        and(value) {
+            this.$makeLeft(value);
+            return this;
+        }
+        or(value) {
+            this.$makeLeft(value);
+            this.evals.push([]);
+            return this;
+        }
+    }
+
     juice.data = function(data) {
-        data = Object(data);
-        data._events = new DefaultDict([]);
-        data.dispatchEvent = function(event) {
-            for (var [node,fx] of this._events[event]) node[fx]();
-            for (var [node,fx] of this._events['any']) node[fx]();
+        if (Object.prototype.toString.call(data) !== "[object Object]") {
+            data = Object(data);
         }
-        data.addEventListener = function(event,node,fx) {
-            if (!this._events[event].some(([n,f]) => n == node && f == fx)) this._events[event].push([node,fx]);
+        data.$events = new DefaultDict([]);
+        data.$dispatchEvent = function(event) {
+            for (var [node,fx] of this.$events[event]) node[fx]();
+            for (var [node,fx] of this.$events['any']) node[fx]();
         }
-        for (const [key, value] of Object.entries(data)) {
-            if (!['addEventListener','dispatchEvent','_events'].includes(key) && Array.isArray(value)) data[key] = new Proxy(data[key], {
-                apply: function(target, thisArg, argumentsList) {
-                    data.dispatchEvent('change');
-                    return thisArg[target].apply(this, argumentList);
-                },
-                deleteProperty: function(target, property) {
-                    data.dispatchEvent('change');
-                    return true;
-                },
-                set: function(target, property, value, receiver) {
-                    target[property] = value;
-                    data.dispatchEvent('change');
-                    return true;
-                }
-            });
+        data.$addEventListener = function(event,node,fx) {
+            if (!this.$events[event].some(([n,f]) => n == node && f == fx)) this.$events[event].push([node,fx]);
         }
         var proxy =  new Proxy(data, {
             set: function(obj, prop, value) {
-                if (!['addEventListener','dispatchEvent','_events'].includes(prop) && Array.isArray(value)) data[prop] = new Proxy(data[prop], {
+                if (!prop.startsWith('$') && Array.isArray(value)) data[prop] = new Proxy(data[prop], {
                     apply: function(target, thisArg, argumentsList) {
-                        data.dispatchEvent('change');
+                        data.$dispatchEvent('change');
                         return thisArg[target].apply(this, argumentList);
                     },
                     deleteProperty: function(target, property) {
-                        data.dispatchEvent('change');
+                        data.$dispatchEvent('change');
                         return true;
                     },
                     set: function(target, property, value, receiver) {
+                        var oldValue = target[property];
                         target[property] = value;
-                        data.dispatchEvent('change');
+                        if (oldValue != value) data.$dispatchEvent('change');
                         return true;
                     }
                 });
                 obj[prop] = value;
-                obj.dispatchEvent('change');
+                obj.$dispatchEvent('change');
             },
             get: function (target, prop, receiver) {
-                if (prop == '_length') return Math.max(...Object.entries(target).map(([k,v]) => Array.isArray(v) ? v.length : 1));
-                else return target[prop];
+                if (prop == '$length') return Math.max(...Object.entries(target).map(([k,v]) => Array.isArray(v) ? v.length : 1));
+                else if (Object.getOwnPropertyNames(juice.operator.prototype).filter(x => !['constructor','$eval'].includes(x)).includes(prop)) {
+                    var op = new juice.operator(target);
+                    return op[prop].bind(op);
+                } else {
+                    var obj = Object(target[prop]);
+                    obj.$data = data;
+                    obj.$key = prop;
+                    var op = new juice.operator(obj);
+                    for (const key of Object.getOwnPropertyNames(juice.operator.prototype)) obj[key] = op[key].bind(op);
+                    return obj;
+                }
             },
         });
+        for (const [key, value] of Object.entries(data)) proxy[key] = data[key];
+        proxy.$data = data;
         return proxy;
     };
 
@@ -200,7 +279,7 @@
                 this.checkConditions();
             } else if (this.fx == 'map') {
                 var data = this.args[0];
-                for (var i=0; i<data._length; i++) {
+                for (var i=0; i<data.$length; i++) {
                     var chain = this.branch.ravel().map(([fx,args]) => {
                         var datapiece = args[0];
                         if (Object.keys(data).some(k => data[k] === datapiece)) {
@@ -214,7 +293,7 @@
                     node.scope.dom = this.scope.dom;
                     node.render();
                 }
-                data.addEventListener('change',this,'rerender');
+                data.$addEventListener('change',this,'rerender');
 
             } else if (this.fx == 'repeat') {
 
@@ -271,16 +350,24 @@
         }
 
         installCondition(conditionalNode) {
-            var string = conditionalNode.args[0];
-            if (string !== undefined) {
-                if (/(\w+) is (landscape|portrait|mobile|desktop)/.test(string)) {
-                    var [object, is, orientation] = string.split(' ');
+            var condition = conditionalNode.args[0];
+            if (condition === undefined) var fx = undefined;
+            else if (condition instanceof juice.operator) {
+                var fx = condition.$eval.bind(condition);
+                for (var data of condition.datas) data.$addEventListener('change',this,'checkConditions');
+            } else if (condition.$data !== undefined) {
+                if (condition.$key !== undefined) var fx = ()=>!!condition.$data[condition.$key];
+                else var fx = ()=>!!condition;
+                condition.$data.$addEventListener('change',this,'checkConditions');
+            } else if (Object.prototype.toString.call(condition) === "[object String]") {
+                if (/(\w+) is (landscape|portrait|mobile|desktop)/.test(condition)) {
+                    var [object, is, orientation] = condition.split(' ');
                     if (orientation == 'landscape') var evaluation = function(node) {return node.rendered_item._isLandscape();}
                     else if (orientation == 'portrait') var evaluation = function(node) {return node.rendered_item._isPortrait();}
                     else if (orientation == 'mobile' && object == 'device') var evaluation = function(node) {return node.rendered_item.isMobile();}
                     else if (orientation == 'desktop' && object == 'device') var evaluation = function(node) {return node.rendered_item.isDesktop();}
-                } else if (/(width|height) of (\w+) (=|>=|<=|>|<) (\w+)/.test(string)) {
-                    var [property, of, object, operator, size] = string.split(' ');
+                } else if (/(width|height) of (\w+) (=|>=|<=|>|<) (\w+)/.test(condition)) {
+                    var [property, of, object, operator, size] = condition.split(' ');
                     if (size.includes('u')) size = size.replace(/u/, '*'+juice.gridsize+'px');
                     size = parseInt(size);
                     if (operator == '=') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] == size)};
@@ -295,7 +382,7 @@
                 else if (object in juice.slot) var triggerNode = juice.slot[object];
                 var fx = function() {return evaluation(triggerNode);}
                 triggerNode.addEventListener('any',this,'checkConditions');
-            } else var fx = undefined;
+            }
             this.conditions.push({node: conditionalNode, fx: fx});
         }
 
