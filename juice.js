@@ -43,9 +43,12 @@
         });
         proxy.def(componentClass).css('width:100vw;height:100vh;flex-direction:row;');
         window.onload = function() {
+            var t0 = performance.now()
             document.body.style.cssText = 'padding:0px;margin:0px;';
             juice.graph.render();
             juice.dispatchEvent('load');
+            var t1 = performance.now()
+            console.log("Rendering page took " + Math.floor((t1 - t0)*100)/100 + " milliseconds.")
         };
         return proxy;
     };
