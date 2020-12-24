@@ -43,96 +43,15 @@
         });
         proxy.def(componentClass).css('width:100vw;height:100vh;flex-direction:row;');
         window.onload = function() {
-            var t0 = performance.now()
+            var t0 = performance.now();
             document.body.style.cssText = 'padding:0px;margin:0px;';
             juice.graph.render();
             juice.dispatchEvent('load');
-            var t1 = performance.now()
-            console.log("Rendering page took " + Math.floor((t1 - t0)*100)/100 + " milliseconds.")
+            var t1 = performance.now();
+            console.log("Rendering page took " + Math.floor((t1 - t0)*100)/100 + " milliseconds.");
         };
         return proxy;
     };
-
-    juice.$this = {};
-    juice.$parent = {};
-    juice.$device = {};
-
-    juice.operator = class {
-        constructor(value) {
-            this.datas = [];
-            this.evals = [[]];
-            this.$makeLeft(value);
-        }
-        $eval() {
-            for (var or of this.evals) {
-                var result = true;
-                for (var fx of or) result = result && fx();
-                if (result) return true;
-            }
-            return false;
-        }
-        $makeLeft(value) {
-            if (value.$data !== undefined) {
-                this.datas.push(value.$data);
-                if (value.$key !== undefined) this.left = ()=>value.$data[value.$key];
-                else this.left = ()=>value.$data;
-            } else {
-                this.datas.push(value);
-                this.left = ()=>value;
-            }
-        }
-        $makeRight(value) {
-            if (value.$data !== undefined) {
-                if (value.$key !== undefined) return ()=>value.$data[value.$key];
-                else return ()=>value.$data;
-            } else return ()=>value;
-        }
-        eq(value) {
-            var left = this.left;
-            var right = this.$makeRight(value);
-            this.evals[this.evals.length-1].push(()=>left() == right());
-            return this;
-        }
-        ne(value) {
-            var left = this.left;
-            var right = this.$makeRight(value);
-            this.evals[this.evals.length-1].push(()=>left() != right());
-            return this;
-        }
-        lt(value) {
-            var left = this.left;
-            var right = this.$makeRight(value);
-            this.evals[this.evals.length-1].push(()=>left() < right());
-            return this;
-        }
-        gt(value) {
-            var left = this.left;
-            var right = this.$makeRight(value);
-            this.evals[this.evals.length-1].push(()=>left() > right());
-            return this;
-        }
-        le(value) {
-            var left = this.left;
-            var right = this.$makeRight(value);
-            this.evals[this.evals.length-1].push(()=>left() <= right());
-            return this;
-        }
-        ge(value) {
-            var left = this.left;
-            var right = this.$makeRight(value);
-            this.evals[this.evals.length-1].push(()=>left() >= right());
-            return this;
-        }
-        and(value) {
-            this.$makeLeft(value);
-            return this;
-        }
-        or(value) {
-            this.$makeLeft(value);
-            this.evals.push([]);
-            return this;
-        }
-    }
 
     juice.data = function(data) {
         if (Object.prototype.toString.call(data) !== "[object Object]") {
@@ -166,26 +85,31 @@
                 });
                 obj[prop] = value;
                 obj.$dispatchEvent('change');
+                return true;
             },
             get: function (target, prop, receiver) {
                 if (prop == '$length') return Math.max(...Object.entries(target).map(([k,v]) => Array.isArray(v) ? v.length : 1));
-                else if (Object.getOwnPropertyNames(juice.operator.prototype).filter(x => !['constructor','$eval'].includes(x)).includes(prop)) {
-                    var op = new juice.operator(target);
-                    return op[prop].bind(op);
-                } else {
-                    var obj = Object(target[prop]);
-                    obj.$data = data;
-                    obj.$key = prop;
-                    var op = new juice.operator(obj);
-                    for (const key of Object.getOwnPropertyNames(juice.operator.prototype)) obj[key] = op[key].bind(op);
-                    return obj;
-                }
+                else return target[prop];
             },
         });
         for (const [key, value] of Object.entries(data)) proxy[key] = data[key];
-        proxy.$data = data;
         return proxy;
     };
+
+    var DEVICE = juice.data({
+        width: undefined,
+        height: undefined,
+        isMobile: undefined,
+        isDesktop: undefined,
+        check: ()=>{
+            DEVICE.width = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+            DEVICE.height = window.innerHeight|| document.documentElement.clientHeight || document.body.clientHeight;
+            DEVICE.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            DEVICE.isDesktop = !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+    });
+    window.addEventListener('resize', DEVICE.check);
+    DEVICE.check();
 
     class Node {
         constructor(fx, args) {
@@ -201,11 +125,31 @@
             this.conditionNodes = [];
             this.conditionState = undefined;
             this.events = new DefaultDict([]);
+            this.dispatch_batch = new Set();
+            this.dispatch_timer = undefined;
+            this.data = juice.data({
+                width: undefined,
+                height: undefined,
+            });
+        }
+
+        updateData() {
+            if (!this.rendered_item) return;
+            var bounds = this.rendered_item.div.getBoundingClientRect();
+            this.data.width = bounds.width;
+            this.data.height = bounds.height;
         }
 
         dispatchEvent(event) {
-            for (var [node,fx] of this.events[event]) node[fx]();
-            for (var [node,fx] of this.events['any']) node[fx]();
+            if (this.dispatch_timer === undefined) this.dispatch_timer = window.setTimeout(()=>{
+                for (var event of this.dispatch_batch) {
+                    for (var [node,fx] of this.events[event]) node[fx]();
+                    for (var [node,fx] of this.events['any']) node[fx]();
+                }
+                this.dispatch_batch = new Set();
+                this.dispatch_timer = undefined;
+            }, 20);
+            this.dispatch_batch.add(event);
         }
 
         addEventListener(event,node,fx) {
@@ -342,6 +286,7 @@
             }
             var self = this;
             item.resizeObserver = new ResizeObserver(()=>{self.dispatchEvent('resize');});
+            this.addEventListener('resize',this,'updateData')
             item.resizeObserver.observe(item.div);
             this.rendered_item = item;
             if (this.scope.dom === undefined) document.body.appendChild(item.div);
@@ -354,38 +299,91 @@
 
         installCondition(conditionalNode) {
             var condition = conditionalNode.args[0];
-            if (condition === undefined) var fx = undefined;
-            else if (condition instanceof juice.operator) {
-                var fx = condition.$eval.bind(condition);
-                for (var data of condition.datas) data.$addEventListener('change',this,'checkConditions');
-            } else if (condition.$data !== undefined) {
-                if (condition.$key !== undefined) var fx = ()=>!!condition.$data[condition.$key];
-                else var fx = ()=>!!condition;
-                condition.$data.$addEventListener('change',this,'checkConditions');
-            } else if (Object.prototype.toString.call(condition) === "[object String]") {
-                if (/(\w+) is (landscape|portrait|mobile|desktop)/.test(condition)) {
-                    var [object, is, orientation] = condition.split(' ');
-                    if (orientation == 'landscape') var evaluation = function(node) {return node.rendered_item._isLandscape();}
-                    else if (orientation == 'portrait') var evaluation = function(node) {return node.rendered_item._isPortrait();}
-                    else if (orientation == 'mobile' && object == 'device') var evaluation = function(node) {return node.rendered_item.isMobile();}
-                    else if (orientation == 'desktop' && object == 'device') var evaluation = function(node) {return node.rendered_item.isDesktop();}
-                } else if (/(width|height) of (\w+) (=|>=|<=|>|<) (\w+)/.test(condition)) {
-                    var [property, of, object, operator, size] = condition.split(' ');
-                    if (size.includes('u')) size = size.replace(/u/, '*'+juice.gridsize+'px');
-                    size = parseInt(size);
-                    if (operator == '=') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] == size)};
-                    if (operator == '>=') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] >= size)};
-                    if (operator == '<=') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] <= size)};
-                    if (operator == '>') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] > size)};
-                    if (operator == '<') var evaluation = function(node) {return (node.rendered_item.div.getBoundingClientRect()[property] < size)};
+            var target_node = this;
+            function parse(expression) {
+                expression = expression.replace(/\s/g,'');
+                var operators = {
+                    '==': (a,b)=>()=>a()==b(),
+                    '!=': (a,b)=>()=>a()!=b(),
+                    '>=': (a,b)=>()=>a()>=b(),
+                    '<=': (a,b)=>()=>a()<=b(),
+                    '>': (a,b)=>()=>a()>b(),
+                    '<': (a,b)=>()=>a()<b(),
+                };
+                var logic = {
+                    '!': (a)=>()=>!a(),
+                    '||': (a,b)=>()=>a()||b(),
+                    '&&': (a,b)=>()=>a()&&b(),
+                };
+                function parse_object(obj) {
+                    if (!isNaN(parseFloat(obj))) return ()=>parseFloat(obj);
+                    var keys = obj.split('.');
+                    var obj = keys.shift();
+                    if (obj=='this') var target = target_node.scope.dom.data;
+                    else if (obj=='parent') var target = target_node.scope.dom.scope.dom.data;
+                    else if (obj=='slot') var target = juice.slot[keys.shift()];
+                    else if (obj=='device') var target = DEVICE;
+                    else var target = window[obj];
+                    var fx = ()=> {var root = target;for (var k of keys) root = root[k];return root};
+                    target.$addEventListener('change',target_node,'checkConditions');
+                    return fx;
                 }
-                if (object == 'this') var triggerNode = conditionalNode.scope.dom;
-                else if (object == 'parent') var triggerNode = conditionalNode.scope.dom.scope.dom;
-                else if (object == 'device') var triggerNode = DEVICE;
-                else if (object in juice.slot) var triggerNode = juice.slot[object];
-                var fx = function() {return evaluation(triggerNode);}
-                triggerNode.addEventListener('any',this,'checkConditions');
+                function split(part) {
+                    var par = 0;
+                    var terms = [];
+                    var term = '';
+                    for (var i=0;i<part.length;i++) {
+                        var char = part[i];
+                        if (char == '(') {
+                            if (term != '' && par == 0) {
+                                terms.push(term);
+                                term = '';
+                            }
+                            if (par != 0) term += char;
+                            par += 1;
+
+                        } else if (char == ')') {
+                            par -= 1;
+                            if (par != 0) term += char;
+                            if (term != '' && par == 0) {
+                                terms.push(term);
+                                term = '';
+                            }
+                        } else if (['&','|'].includes(char) && par == 0) {
+                            if (part[i+1]==char) {
+                                i++;
+                                if (term != '') terms.push(term);
+                                terms.push(char.repeat(2));
+                                term = '';
+                            }
+                        } else term += char;
+                    }
+                    if (terms.length == 0) {
+                        for (const [op,fx] of Object.entries(operators)) {
+                            var ab = term.split(op);
+                            if (ab != term) {
+                                var [a,b] = ab;
+                                if (op == '!' && b[0] != '=') term = logic['!'](parse_object(b));
+                                else term = fx(parse_object(a),parse_object(b));
+                                break;
+                            }
+                        }
+                        if (typeof term === 'string') term = parse_object(term);
+                    }
+                    if (term != '') terms.push(term);
+                    for (var t=0;t<terms.length;t++) if (typeof term === 'string' && !Object.keys(logic).includes(terms[t])) terms[t] = split(terms[t]);
+                    for (var op of ['!','&&','||']) { // order determines precedence
+                        while (terms.includes(op)) {
+                            var i = terms.indexOf(op);
+                            if (op == '!') terms.splice(i,2,logic[op](terms[i+1]));
+                            else terms.splice(i-1,3,logic[op](terms[i-1],terms[i+1]));
+                        }
+                    }
+                    return terms[0];
+                }
+                return split(expression);
             }
+            var fx = condition ? parse(condition) : undefined;
             this.conditions.push({node: conditionalNode, fx: fx});
         }
 
@@ -631,3 +629,7 @@
     }
 
 }(window.juice = window.juice || {}));
+
+$this = juice.$this;
+$parent = juice.$parent;
+$device = juice.$device;
