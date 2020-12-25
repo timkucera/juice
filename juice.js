@@ -89,7 +89,12 @@
             },
             get: function (target, prop, receiver) {
                 if (prop == '$length') return Math.max(...Object.entries(target).map(([k,v]) => Array.isArray(v) ? v.length : 1));
-                else return target[prop];
+                else {
+                    var obj = Object(target[prop]);
+                    obj.$data = data;
+                    obj.$key = prop;
+                    return obj;
+                }
             },
         });
         for (const [key, value] of Object.entries(data)) proxy[key] = data[key];
@@ -173,7 +178,7 @@
                 return node;
             }
 
-            if (['def','if','elif','else','map'].includes(this.fx) && !this.branch_closed) {
+            if (['def','if','elif','else','map','repeat'].includes(this.fx) && !this.branch_closed) {
                 node.scope.graph = this;
                 this.branch = node;
             } else {
@@ -199,7 +204,7 @@
         }
 
         clone() {
-            var chain = this.ravel();
+            var chain = this.branch.ravel();
             return this.fromChain(chain);
         }
 
@@ -241,9 +246,16 @@
                     node.render();
                 }
                 data.$addEventListener('change',this,'rerender');
-
             } else if (this.fx == 'repeat') {
-
+                var arg = this.args[0];
+                if (arg.$data && arg.$key) var repeats = arg.$data[arg.$key];
+                else var repeats = arg;
+                for (var i=0; i<repeats; i++) {
+                    var node = this.clone();
+                    node.scope.dom = this.scope.dom;
+                    node.render();
+                }
+                if (arg.$data) arg.$data.$addEventListener('change',this,'rerender');
             } else if (this.fx == 'insert') {
 
             } else if (['end','else','elif','slot'].includes(this.fx)) {
@@ -317,6 +329,8 @@
                 };
                 function parse_object(obj) {
                     if (!isNaN(parseFloat(obj))) return ()=>parseFloat(obj);
+                    else if (obj == 'true') return ()=>true;
+                    else if (obj == 'false') return ()=>false;
                     var keys = obj.split('.');
                     var obj = keys.shift();
                     if (obj=='this') var target = target_node.scope.dom.data;
@@ -484,7 +498,7 @@
             return string;
         }
 
-        _parse_font_size = function(string) {
+        _parse_font_size(string) {
             if (string == '' || string == 'normal') return '12px';
             else if (string == 'big') return '16px';
             else if (string == 'verybig') return '22px';
