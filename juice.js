@@ -53,10 +53,39 @@
         return proxy;
     };
 
-    juice.data = function(data) {
-        if (Object.prototype.toString.call(data) !== "[object Object]") {
-            data = Object(data);
+    juice.templates = {};
+    var active_template = undefined;
+    juice.template = function(name) {
+        var graph = new Graph();
+        graph.appendNode('map');
+        var proxy = new Proxy({}, {
+            get: function(target, fx, receiver) {
+                return function(...args) {
+                    graph.appendNode(fx,args);
+                    return proxy;
+                }
+            }
+        });
+        active_template = name;
+        juice.templates[name] = graph;
+        return proxy;
+    };
+
+    class TemplateItem {
+        constructor(template, key) {
+            this.template = template;
+            this.key = key;
         }
+    }
+
+    juice.$template = new Proxy({}, {
+        get: function (target, prop, receiver) {
+            return new TemplateItem(active_template,prop);
+        },
+    });
+
+    juice.data = function(data) {
+        if (Object.prototype.toString.call(data) !== "[object Object]") data = Object(data);
         data.$events = new DefaultDict([]);
         data.$dispatchEvent = function(event) {
             for (var [node,fx] of this.$events[event]) node[fx]();
@@ -73,31 +102,35 @@
                         return thisArg[target].apply(this, argumentList);
                     },
                     deleteProperty: function(target, property) {
+                        delete target[property];
                         data.$dispatchEvent('change');
                         return true;
                     },
                     set: function(target, property, value, receiver) {
+                        if (Object.prototype.toString.call(value) !== "[object Object]") value = Object(value);
                         var oldValue = target[property];
                         target[property] = value;
                         if (oldValue != value) data.$dispatchEvent('change');
                         return true;
                     }
                 });
+                if (Object.prototype.toString.call(value) !== "[object Object]") value = Object(value);
                 obj[prop] = value;
                 obj.$dispatchEvent('change');
                 return true;
             },
             get: function (target, prop, receiver) {
                 if (prop == '$length') return Math.max(...Object.entries(target).map(([k,v]) => Array.isArray(v) ? v.length : 1));
-                else {
+                else if (Object.getOwnPropertyNames(target).includes(prop)) {
                     var obj = Object(target[prop]);
-                    obj.$data = data;
+                    obj.$data = target;
                     obj.$key = prop;
                     return obj;
-                }
+                } else return target[prop];
             },
         });
         for (const [key, value] of Object.entries(data)) proxy[key] = data[key];
+        proxy.$data = data;
         return proxy;
     };
 
@@ -204,7 +237,7 @@
         }
 
         clone() {
-            var chain = this.branch.ravel();
+            var chain = this.ravel();
             return this.fromChain(chain);
         }
 
@@ -231,35 +264,45 @@
                 this.checkConditions();
             } else if (this.fx == 'map') {
                 var data = this.args[0];
+                if (!data.$data) data = juice.data(data);
+                var template = this.template;
                 for (var i=0; i<data.$length; i++) {
                     var chain = this.branch.ravel().map(([fx,args]) => {
                         var datapiece = args[0];
-                        if (Object.keys(data).some(k => data[k] === datapiece)) {
+                        if (!!datapiece && datapiece === juice.$template) return [fx,[data.$data]]
+                        if (!!datapiece && datapiece instanceof TemplateItem && datapiece.template == template) datapiece = data[datapiece.key];
+                        if (!!datapiece && datapiece.$data === data.$data) {
+                            if (datapiece.$key) datapiece = datapiece.$data[datapiece.$key];
                             if (Array.isArray(datapiece)) return [fx,[datapiece[i]]];
                             else if (datapiece && {}.toString.call(datapiece) === '[object Function]') return [fx,[datapiece(i)]];
                             else return [fx,[datapiece]];
-                        }
-                        else return [fx,args];
+                        } else return [fx,args];
                     });
                     var node = this.fromChain(chain);
                     node.scope.dom = this.scope.dom;
                     node.render();
                 }
-                data.$addEventListener('change',this,'rerender');
+                if (data.$data) data.$addEventListener('change',this,'rerender');
             } else if (this.fx == 'repeat') {
                 var arg = this.args[0];
                 if (arg.$data && arg.$key) var repeats = arg.$data[arg.$key];
                 else var repeats = arg;
                 for (var i=0; i<repeats; i++) {
-                    var node = this.clone();
+                    var node = this.branch.clone();
                     node.scope.dom = this.scope.dom;
                     node.render();
                 }
                 if (arg.$data) arg.$data.$addEventListener('change',this,'rerender');
-            } else if (this.fx == 'insert') {
-
             } else if (['end','else','elif','slot'].includes(this.fx)) {
                 // do  nothing
+            } else if (Object.keys(juice.templates).includes(this.fx)) {
+                var name = this.fx;
+                var data = this.args[0];
+                var graph = juice.templates[name].root.clone();
+                graph.args = [data];
+                graph.template = name;
+                graph.scope.dom = this.scope.dom;
+                graph.render();
             } else {
                 this.scope.dom.rendered_item[this.fx](...this.args);
             }
@@ -285,7 +328,7 @@
 
         rerender() {
             this.unrender();
-            this.render()
+            this.render();
         }
 
         addNewItem() {
@@ -644,6 +687,4 @@
 
 }(window.juice = window.juice || {}));
 
-$this = juice.$this;
-$parent = juice.$parent;
-$device = juice.$device;
+$template = juice.$template;
