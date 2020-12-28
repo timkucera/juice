@@ -37,6 +37,7 @@
             get: function(target, fx, receiver) {
                 return function(...args) {
                     juice.graph.appendNode(fx,args);
+                    juice.graph.tip.errorstack = new Error().stack;
                     return proxy;
                 }
             }
@@ -171,7 +172,7 @@
             });
         }
 
-        updateData() {
+        updateDimensions() {
             if (!this.rendered_item) return;
             var bounds = this.rendered_item.div.getBoundingClientRect();
             this.data.width = bounds.width;
@@ -304,6 +305,7 @@
                 graph.scope.dom = this.scope.dom;
                 graph.render();
             } else {
+                if (!this.fx in this.scope.dom.rendered_item) throw 'Function '+this.fx+' not found. '+this.errorstack;
                 this.scope.dom.rendered_item[this.fx](...this.args);
             }
             if (this.after !== undefined) this.after.render();
@@ -332,16 +334,20 @@
         }
 
         addNewItem() {
-            if (this.args[0] === undefined) var item = new juice.Item();
-            else {
+            if (this.args[0] === undefined) {
+                var item = new juice.Item();
+                item.node = this;
+            } else {
                 var className = this.args[0][0].toUpperCase() + this.args[0].slice(1).toLowerCase();
                 if (!component.hasOwnProperty(className)) throw 'Component class "'+className+'" was not found.';
                 var item = new component[className]();
+                item.node = this;
+                item.data = this.data;
                 item.init();
             }
             var self = this;
             item.resizeObserver = new ResizeObserver(()=>{self.dispatchEvent('resize');});
-            this.addEventListener('resize',this,'updateData')
+            this.addEventListener('resize',this,'updateDimensions')
             item.resizeObserver.observe(item.div);
             this.rendered_item = item;
             if (this.scope.dom === undefined) document.body.appendChild(item.div);

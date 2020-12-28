@@ -1,17 +1,17 @@
 (function(component, undefined) {
 
-    function applyStyle(style, elem) {
+    function applyStyle(style, elem, color) {
         var styles = style.split(' ');
         if (styles.length == 1) {
-            if (style == 'flat') elem.div.style.cssText += 'border:none;';
-            else if (style == 'border') elem.div.style.cssText += 'border:2px solid '+elem._color.dark+';';
-            else if (style == 'round') elem.div.style.cssText += 'border-radius:calc('+elem._height+'/2);'; // TODO: smallest side / 2
-            else if (style == 'rounded') elem.div.style.cssText += 'border-radius:10px;';
-            else if (style == 'rect') elem.div.style.cssText += 'border-radius:2px;';
-            else if (style == 'sharp') elem.div.style.cssText += 'border-radius:0px;';
-            else if (style == 'shadow') elem.div.style.cssText += 'box-shadow:0px 0px 3px '+elem._color.dark+';';
-            else if (style == 'none') elem.div.style.cssText += 'border:none;background-color:none;';
-        } else styles.forEach(item => applyStyle(item, elem));
+            if (style == 'flat') elem.style.cssText += 'border:none;';
+            else if (style == 'border') elem.style.cssText += 'border:2px solid '+color.dark+';';
+            else if (style == 'round') elem.style.cssText += 'border-radius:999px;'; // TODO: smallest side / 2
+            else if (style == 'rounded') elem.style.cssText += 'border-radius:10px;';
+            else if (style == 'rect') elem.style.cssText += 'border-radius:2px;';
+            else if (style == 'sharp') elem.style.cssText += 'border-radius:0px;';
+            else if (style == 'shadow') elem.style.cssText += 'box-shadow:0px 0px 3px '+color.dark+';';
+            else if (style == 'none') elem.style.cssText += 'border:none;background-color:none;';
+        } else styles.forEach(style => applyStyle(style, elem, color));
     }
 
     component.Button = class Button extends juice.Item {
@@ -20,8 +20,8 @@
             //TODO: change to dynamic gridsize and color
             this.div.style.cssText += 'justify-content:center;align-items:center;cursor:pointer;color:'+this._color.text+';background-color:'+this._color.normal+';user-select:none;outline:0;-webkit-user-select: none;';
             this.style('border rect');
-            this.div.onmouseover = function() {this.style.filter = 'brightness(90%)'}
-            this.div.onmouseleave = function() {this.style.filter = 'none'}
+            this.div.addEventListener('mouseover',function() {this.style.filter = 'brightness(90%)'});
+            this.div.addEventListener('mouseleave',function() {this.style.filter = 'none'});
         }
 
         text(text) {
@@ -48,7 +48,7 @@
         }
 
         style(style) {
-            applyStyle(style, this);
+            applyStyle(style, this.div, this._color);
             return this;
         }
     }
@@ -56,171 +56,168 @@
     component.Switch = class Switch extends juice.Item {
 
         init() {
-            this.div.style.cssText += 'color:'+this._color.light+';background-color:'+this._color.dark+';user-select:none;outline:0;-webkit-user-select:none;cursor:pointer;position:relative;text-align:center;';
-            this._divOn = document.createElement('div');
-            this._divOn.style.cssText = 'width:50%;height:100%;box-sizing:border-box;overflow:hidden;color:'+this._color.dark+';background-color:'+this._color.light+';object-fit:contain;text-align:center;';
-            this.div.appendChild(this._divOn)
-            this._divOff = document.createElement('div');
-            this._divOff.style.cssText = 'width:50%;height:100%;box-sizing:border-box;overflow:hidden;color:'+this._color.dark+';background-color:'+this._color.light+';object-fit:contain;text-align:center;';
-            this.div.appendChild(this._divOff)
-            this.style('border rect');
-            this.transition('slide');
-            this._state = 1;
+            this.div.style.cssText += 'position:relative;user-select:none;background-color:'+this._color.dark+';';
+
+            this.container = document.createElement('div');
+            this.container.style.cssText = 'display:grid;height:100%;width:100%;';
+            this.div.appendChild(this.container);
+
+            this.handle = document.createElement('div');
+            this.handle.style.cssText = 'z-index:1;position:absolute;overflow:hidden;transition:all 0.2s ease-in-out;pointer-events:none;height:100%;';
+            this.div.appendChild(this.handle);
+
+            this.handleContainer = document.createElement('div');
+            this.handleContainer.style.cssText = 'position:relative;display:grid;transition:left 0.2s ease-in-out;';
+            this.handle.appendChild(this.handleContainer);
+
+            this.states = {};
+            this.data.state = undefined;
+            this._offstate = false;
+            this._state = undefined;
+            this.isBold = false;
+            this._transition = 'push';
+        }
+
+        width(string) {
+            super.width(string);
+            this._fixWidth();
+            return this;
+        }
+
+        _fixWidth(string) {
+            const computed = getComputedStyle(this.div);
+            const borderLeft = parseFloat(computed.borderLeftWidth);
+            const borderWidth = borderLeft + parseFloat(computed.borderRightWidth);
+            this.handleContainer.style.minWidth = this.container.clientWidth-borderWidth/2+'px';
+        }
+
+        height(string) {
+            super.height(string);
+            this._fixHeight();
+            return this;
+        }
+
+        _fixHeight(string) {
+            const computed = getComputedStyle(this.div);
+            const borderTop = parseFloat(computed.borderTopWidth);
+            const borderHeight = borderTop + parseFloat(computed.borderBottomWidth);
+            this.handleContainer.style.minHeight = this.container.clientHeight-borderHeight/2+'px';
+        }
+
+        state(name,label) { // TODO: different on/off labels
+            if (name == undefined) {
+                this._offstate = true;
+                return this;
+            }
+            if (label === undefined) label = name;
+            var state = document.createElement('div');
+            state.style.cssText = 'color:'+this._color.light+';background-color:'+this._color.dark+';cursor:pointer;transition:all 0.2s ease-in-out;display:flex;justify-content:center;align-items:center;padding:5px';
+            state.addEventListener('mouseover',()=>this.style.filter = 'brightness(150%)');
+            state.addEventListener('mouseleave',()=>this.style.filter = 'none');
             var self = this;
-            this.div.onclick = function(e) {self.toggle();};
-            this.state('off');
-        }
+            state.addEventListener('click',()=>self.toggle(name));
 
-        toggle() {
-            if (this._state == 1) this.state(0);
-            else if (this._state == 0) this.state(1);
-            this.div.dispatchEvent(new CustomEvent('toggle',{detail:{state:this._state}}));
-        }
+            var content = document.createElement('div');
+            if (['svg','png','jpeg','jpg','gif','webp','apng','avif'].includes(label.split('.').pop())) {
+                if (label.split('.').pop() == 'svg') {
+                    content.style.cssText = 'width:80%;height:80%;background-color:'+this._color.light+';-webkit-mask-image:url('+label+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;';
+                } else content.style.content = 'url('+label+')';
+                state.type = 'image';
+            } else {
+                content.innerHTML = label;
+                content.style.color = this._color.light;
+                if (this.isBold) content.style.fontWeight = 'bold';
+                state.type = 'text';
+            }
+            content.style.transition = 'all 0.2s ease-in-out';
+            state.content = content;
+            state.appendChild(content);
 
-        text(text) {
-            this.textOn(text);
-            this.textOff(text);
+            var num_states = Object.keys(this.states).length;
+            this.container.style.gridTemplateColumns = ' auto'.repeat(num_states+1);
+            this.handleContainer.style.gridTemplateColumns = ' auto'.repeat(num_states+1);
+            state.style.gridColumnStart = num_states+1;
+            var handle_clone = state.cloneNode(true);
+            handle_clone.style.backgroundColor = this._color.light;
+            if (state.type == 'image') handle_clone.childNodes[0].style.backgroundColor = this._color.dark;
+            if (state.type == 'text') handle_clone.childNodes[0].style.color = this._color.dark;
+            this.handleContainer.appendChild(handle_clone);
+            this.container.appendChild(state);
+            this.states[name] = state;
             return this;
         }
 
-        textOn(text) {
-            this._divOn.style.padding = '5px 10px 5px 10px';
-            this._divOn.innerHTML = text;
+        default(name) {
+            this.toggle(name);
             return this;
         }
 
-        textOff(text) {
-            this._divOff.style.padding = '5px 10px 5px 10px';
-            this._divOff.innerHTML = text;
-            return this;
+        toggle(name) {
+            if (this._state == name) {
+                if (this._offstate) {
+                    this.setState(name, false);
+                    this._state = undefined;
+                    this.data.state = undefined;
+                } else if (Object.keys(this.states).length == 2) {
+                    var otherState = Object.keys(this.states)[0] == name ? Object.keys(this.states)[1] : Object.keys(this.states)[0];
+                    this.toggle(otherState);
+                }
+            } else {
+                if (this._state) this.setState(this._state, false);
+                this.setState(name, true);
+                this._state = name;
+                this.data.state = name;
+            }
+        }
+
+        setState(name,state) {
+            if (this._transition == 'push') {
+                var backgroundColor = state ? this._color.light : this._color.dark;
+                var foregroundColor = state ? this._color.dark : this._color.light;
+                this.states[name].style.backgroundColor = backgroundColor;
+                if (this.states[name].type == 'image') this.states[name].content.style.backgroundColor = foregroundColor;
+                if (this.states[name].type == 'text') this.states[name].content.style.color = foregroundColor;
+            } else if (this._transition == 'slide') {
+                if (state == true) {
+                    this.handle.style.left = this.states[name].offsetLeft+'px';
+                    this.handle.style.width = this.states[name].getBoundingClientRect().width+'px';
+                    this.handleContainer.style.left = -this.states[name].offsetLeft+'px';
+                }
+            }
         }
 
         bold(string) {
-            var weight = 'bold';
-            this._divOn.style.fontWeight = weight;
-            this._divOff.style.fontWeight = weight;
+            Object.keys(this.states).forEach(name => this.states[name].content.style.fontWeight = 'bold');
+            this.isBold = true;
             return this;
         }
 
         transition(string) {
-            this._transition = string;
-            if (this._handle != undefined) {
-                this.div.removeChild(this._handle);
-                this._handle = undefined;
+            var transitions = string.split(' ');
+            var self = this;
+            function setTransition(t) {
+                if (t == 'push') {
+                    self.handle.style.display = 'none';
+                    self._transition = t;
+                } else if (t == 'slide') {
+                    self.handle.style.display = 'flex';
+                    self._transition = t;
+                } else if (t == 'underline') self.handle.style.cssText += 'height:3px;bottom:0px;'
             }
-            this._divOn.style.transition = 'none';
-            this._divOff.style.transition = 'none';
-            this._divOn.style.cssText += 'transition:none;position:relative;top:;right:;opacity:1;width:50%;background-color:'+this._color.light;
-            this._divOff.style.cssText += 'transition:none;position:relative;top:;right:;opacity:1;width:50%;background-color:'+this._color.light;
-            if (string == 'push') {
-                this._divOn.style.cssText += 'position:absolute;top:0px;right:0px;opacity:1;width:100%;background-color:'+this._color.light+';color:'+this._color.dark;
-                this._divOff.style.cssText += 'position:absolute;top:0px;right:0px;opacity:1;width:100%;background-color:'+this._color.dark+';color:'+this._color.light;
-                this._divOn.style.transition = 'opacity 0.2s ease-in-out, background-color 0.2s ease-in-out';
-                this._divOff.style.transition = 'opacity 0.2s ease-in-out, background-color 0.2s ease-in-out';
-            } else if (string == 'flip') {
-                this._divOn.style.transition = 'background-color 0.2s ease-in-out';
-                this._divOff.style.transition = 'background-color 0.2s ease-in-out';
-            } else if (string == 'slide') {
-                this._handle = document.createElement('div');
-                this._handle.style.cssText = 'left:0px;right:0px;position:absolute;width:50%;height:100%;box-sizing:border-box;overflow:hidden;background-color:'+this._color.dark;
-                this.div.appendChild(this._handle)
-                this._handle.style.transition = 'left 0.2s ease-in-out, right 0.2s ease-in-out';
-            }
-            this.style(this._style);
-            return this;
-        }
-
-        imageOn(path) {
-            this._divOn.style.padding = '3px';
-            if (path.split('.').pop() == 'svg') {
-                var svg = document.createElement('div');
-                svg.style = 'width:100%;height:100%;background-color:'+this._color.dark+';-webkit-mask-image:url('+path+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;background-color 0.2s ease-in-out;';
-                this._divOn.appendChild(svg);
-                this._divOn.svg = svg;
-            } else this._divOn.style.content = 'url('+path+')';
-            return this;
-        }
-
-        imageOff(path) {
-            this._divOff.style.padding = '3px';
-            if (path.split('.').pop() == 'svg') {
-                var svg = document.createElement('div');
-                svg.style = 'width:100%;height:100%;background-color:'+this._color.light+';-webkit-mask-image:url('+path+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;transition:background-color 0.2s ease-in-out;';
-                this._divOff.appendChild(svg);
-                this._divOff.svg = svg;
-            } else this._divOff.style.content = 'url('+path+')';
-            return this;
-        }
-
-        image(path) {
-            this.imageOn(path);
-            this.imageOff(path);
+            transitions.forEach(transition => setTransition(transition));
             return this;
         }
 
         style(style) {
             this._style = style;
-            function applyStyleToHandle(style, elem) {
-                var styles = style.split(' ');
-                if (styles.length == 1) {
-                    if (style == 'flat') elem._handle.style.cssText += 'border:none;';
-                    else if (style == 'border') elem._handle.style.cssText += 'border:2px solid '+elem._color.dark+';';
-                    else if (style == 'round') elem._handle.style.cssText += 'border-radius:calc('+elem._height+'/2);';
-                    else if (style == 'rounded') elem._handle.style.cssText += 'border-radius:10px;';
-                    else if (style == 'rect') elem._handle.style.cssText += 'border-radius:2px;';
-                    else if (style == 'shadow') elem._handle.style.cssText += 'box-shadow:0px 0px 3px '+elem._color.dark+';';
-                    else if (style == 'none') elem._handle.style.cssText += 'border:none;background-color:none;';
-                } else styles.forEach(item => applyStyleToHandle(item, elem));
-            }
-            if (this._transition == 'slide') applyStyleToHandle(style,this)
-            applyStyle(style, this);
+            applyStyle(style, this.handle, this._color);
+            this.handle.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.light+';border:none;';
+            applyStyle(style, this.div, this._color);
+            this._fixWidth();
+            this._fixHeight();
             return this;
         }
 
-        state(string) {
-            if (this._transition == 'push') {
-                if (string == 'on' || string == 1) {
-                    this._divOn.style.opacity = 1;
-                    this._divOff.style.opacity = 0;
-                } else if (string == 'off' || string == 0) {
-                    this._divOff.style.opacity = 1;
-                    this._divOn.style.opacity = 0;
-                }
-            } else if (this._transition == 'flip') {
-                if (string == 'on' || string == 1) {
-                    this._divOn.style.backgroundColor = this._color.dark;
-                    this._divOff.style.backgroundColor = this._color.light;
-                    if (this._divOn.svg != undefined) this._divOn.svg.style.backgroundColor = this._color.light;
-                    if (this._divOff.svg != undefined) this._divOff.svg.style.backgroundColor = this._color.dark;
-                } else if (string == 'off' || string == 0) {
-                    this._divOff.style.backgroundColor = this._color.dark;
-                    this._divOn.style.backgroundColor = this._color.light;
-                    if (this._divOn.svg != undefined) this._divOn.svg.style.backgroundColor = this._color.dark;
-                    if (this._divOff.svg != undefined) this._divOff.svg.style.backgroundColor = this._color.light;
-                }
-            } else if (this._transition == 'slide') {
-                if (string == 'on' || string == 1) {
-                    this._handle.style.left = '50%';
-                    this._handle.style.right = '0px';
-                } else if (string == 'off' || string == 0) {
-                    this._handle.style.right = '50%';
-                    this._handle.style.left = '0px';
-                }
-            }
-            this._state = (string == 'on' || string == 1) ? 1 : 0;
-            return this;
-        }
-    }
-
-    component.Multiswitch = class Multiswitch extends component.Switch {
-        state(string) {
-            if (string == 'on' || string == 1) {
-                this._parent._children.forEach(child => {
-                    if (child.constructor.name == 'Multiswitch') child.state('off');
-                });
-            }
-            super.state(string);
-        }
     }
 
     component.Image = class Image extends juice.Item {
@@ -254,7 +251,7 @@
         }*/
 
         style(style) {
-            applyStyle(style, this);
+            applyStyle(style, this.div, this._color);
             return this;
         }
     }
@@ -272,7 +269,7 @@
         }
 
         style(style) {
-            applyStyle(style, this);
+            applyStyle(style, this.div, this._color);
             return this;
         }
     }
@@ -318,7 +315,7 @@
         }
 
         style(style) {
-            applyStyle(style, this);
+            applyStyle(style, this.div, this._color);
             return this;
         }
     }
@@ -370,7 +367,7 @@
         }
 
         style(style) {
-            applyStyle(style, this);
+            applyStyle(style, this.div, this._color);
             return this;
         }
     }
@@ -455,7 +452,7 @@
         }
 
         style(style) {
-            applyStyle(style, this);
+            applyStyle(style, this.div, this._color);
             return this;
         }
 
@@ -475,8 +472,8 @@
             this.style('flat rect');
         }
 
-        def(name) {
-            var w = super.def(name);
+        page(name) {
+            var w = super.def();
             this._pages.push(w);
             w.div.style.position = 'absolute';
             w.div.style.cssText += 'top:0px;bottom:0px;right:0px;left:0px;position:absolute;display:flex;-webkit-backface-visibility:hidden;';
@@ -559,7 +556,7 @@
         }
 
         style(style) {
-            applyStyle(style, this);
+            applyStyle(style, this.div, this._color);
             return this;
         }
     }
