@@ -198,7 +198,7 @@
         append(node) {
             if (node.fx == 'slot') juice.slot[node.args[0]] = this;
 
-            if (this.fx == 'def' && !this.branch_closed) node.scope.dom = this;
+            if (['def','page'].includes(this.fx) && !this.branch_closed) node.scope.dom = this;
             else node.scope.dom = this.scope.dom;
 
             if (node.fx == 'if') node.scope.if = node;
@@ -212,7 +212,7 @@
                 return node;
             }
 
-            if (['def','if','elif','else','map','repeat'].includes(this.fx) && !this.branch_closed) {
+            if (['def','if','elif','else','map','repeat','page'].includes(this.fx) && !this.branch_closed) {
                 node.scope.graph = this;
                 this.branch = node;
             } else {
@@ -294,6 +294,16 @@
                     node.render();
                 }
                 if (arg.$data) arg.$data.$addEventListener('change',this,'rerender');
+            } else if (this.fx == 'page') {
+                var name = this.args[0];
+                this.fx = 'def';
+                this.args = ['page'];
+                this.rendered = false;
+                this.render();
+                this.scope.dom.rendered_item._pages[name] = this.rendered_item;
+                this.scope.dom.rendered_item._page_order.push(name);
+                this.scope.dom.rendered_item.setPage(name);
+                return;
             } else if (['end','else','elif','slot'].includes(this.fx)) {
                 // do  nothing
             } else if (Object.keys(juice.templates).includes(this.fx)) {
@@ -337,12 +347,14 @@
             if (this.args[0] === undefined) {
                 var item = new juice.Item();
                 item.node = this;
+                item.div.setAttribute('name','');
             } else {
                 var className = this.args[0][0].toUpperCase() + this.args[0].slice(1).toLowerCase();
                 if (!component.hasOwnProperty(className)) throw 'Component class "'+className+'" was not found.';
                 var item = new component[className]();
                 item.node = this;
                 item.data = this.data;
+                item.div.setAttribute('name',className);
                 item.init();
             }
             var self = this;

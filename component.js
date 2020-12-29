@@ -462,96 +462,116 @@
         }
     }
 
-    component.Page = class Page extends juice.Item {
+    component.Page = class extends juice.Item {
+        init() {
+            this.div.style.cssText += 'position:relative;top:0px;bottom:0px;right:0px;left:0px;position:absolute;display:flex;-webkit-backface-visibility:hidden;';
+            this.transition = this.node.scope.dom.rendered_item._transition;
+            this.setTransition(this.transition );
+        }
+
+        transition(string, show=false) {
+            item.div.style.transition = 'none';
+            this.show();
+            this.transition = string;
+            if (!show) this.hide();
+            this.setTransition(string);
+        }
+
+        setTransition(string) {
+            if (string == 'fade') this.div.style.transition = 'opacity 0.3s ease-in-out, visibility 0.3s ease-in-out';
+            else if (string == 'slide') this.div.style.transition = 'left 0.3s ease-in-out, right 0.3s ease-in-out, visibility 0.3s ease-in-out';
+            else if (string == 'flip') this.div.style.transition = 'transform 0.3s ease-in-out';
+            else this.div.style.transition = '';
+        }
+
+        show() {
+            this.div.style.display = 'flex';
+            this.div.clientWidth; //hack to set display:flex before opacity transition
+            if (this.transition == 'fade') {
+                this.div.style.opacity = 1;
+                this.div.style.visibility = 'visible';
+            } else if (this.transition == 'slide') {
+                this.div.style.left = '0';
+                this.div.style.right = '0';
+                this.div.style.visibility = 'visible';
+            } else if (this.transition == 'flip') this.div.style.transform = 'rotateY(0deg)';
+        }
+
+        hide(direction) {
+            if (this.transition == 'fade') {
+                this.div.style.opacity = 0;
+                this.div.style.visibility = 'hidden';
+            } else if (this.transition == 'slide') {
+                this.div.style.left = (direction == 'right') ? '-150%' : '150%';
+                this.div.style.right = (direction == 'right') ? '150%' : '-150%';
+                this.div.style.visibility = 'hidden';
+            } else if (this.transition == 'flip') this.div.style.transform = 'rotateY(180deg)';
+            else this.div.style.display = 'none';
+        }
+
+    }
+
+    component.Pages = class extends juice.Item {
 
         init() {
-            this.div.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.light+';position:relative;overflow:hiiden;';
-            this._pages = [];
+            this.div.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.light+';position:relative;overflow:hidden;';
+            this._pages = {};
+            this._page_order = [];
             this._current_page = false;
             this._transition = 'none';
             this.style('flat rect');
         }
 
-        page(name) {
-            var w = super.def();
-            this._pages.push(w);
-            w.div.style.position = 'absolute';
-            w.div.style.cssText += 'top:0px;bottom:0px;right:0px;left:0px;position:absolute;display:flex;-webkit-backface-visibility:hidden;';
-            if (this._transition == 'fade') w.div.style.transition = 'opacity 0.3s ease-in-out, visibility 0.3s ease-in-out';
-            else if (this._transition == 'slide') w.div.style.transition = 'left 0.3s ease-in-out, right 0.3s ease-in-out, visibility 0.3s ease-in-out';
-            else if (this._transition == 'flip') w.div.style.transition = 'transform 0.3s ease-in-out';
-            else w.div.style.transition = '';
-            this.setPage(name);
-            return w;
+        _hide(name) {
+            var direction = this._page_order.indexOf(name) < this._page_order.indexOf(this._current_page) ? 'left' : 'right';
+            this._pages[name].hide(direction);
+            // //var active_transition = (document.readyState === 'interactive' || document.readyState === 'complete')
+            // if (this._transition == 'fade') {
+            //     //if (active_transition) widget.div.addEventListener('transitionend',function(e){if (this.style.opacity == 0) {this.style.display='none';}},{once:true});
+            //     //else widget.div.style.display = 'none';
+            //     widget.div.style.opacity = 0;
+            //     widget.div.style.visibility = 'hidden';
+            // } else if (this._transition == 'slide') {
+            //     var idx = this._pages.indexOf(widget);
+            //     var cidx = this._pages.indexOf(this._current_page);
+            //     if (idx < cidx) {
+            //         //if (active_transition) {
+            //         //    if (widget.div.style.left == '0px') widget.div.addEventListener('transitionend',function(e){this.style.display='none';},{once:true});
+            //         //} else if (widget.div.style.left == '0px') widget.div.style.display = 'none';
+            //         widget.div.style.left = '-150%';
+            //         widget.div.style.right = '150%';
+            //     } else if (idx > cidx) {
+            //         //if (active_transition) {
+            //         //    if (widget.div.style.right == '0px') widget.div.addEventListener('transitionend',function(e){this.style.display='none';},{once:true});
+            //         //} else if (widget.div.style.right == '0px') widget.div.style.display = 'none';
+            //         widget.div.style.left = '150%';
+            //         widget.div.style.right = '-150%';
+            //     }
+            //     widget.div.style.visibility = 'hidden';
+            // } else if (this._transition == 'flip') widget.div.style.transform = 'rotateX(180deg)';
+            // else widget.div.style.display = 'none';
         }
 
-        _hide(widget) {
-            var active_transition = (document.readyState === 'interactive' || document.readyState === 'complete')
-            if (this._transition == 'fade') {
-                //if (active_transition) widget.div.addEventListener('transitionend',function(e){if (this.style.opacity == 0) {this.style.display='none';}},{once:true});
-                //else widget.div.style.display = 'none';
-                widget.div.style.opacity = 0;
-                widget.div.style.visibility = 'hidden';
-            } else if (this._transition == 'slide') {
-                var idx = this._pages.indexOf(widget);
-                var cidx = this._pages.indexOf(this._current_page);
-                if (idx < cidx) {
-                    //if (active_transition) {
-                    //    if (widget.div.style.left == '0px') widget.div.addEventListener('transitionend',function(e){this.style.display='none';},{once:true});
-                    //} else if (widget.div.style.left == '0px') widget.div.style.display = 'none';
-                    widget.div.style.left = '-150%';
-                    widget.div.style.right = '150%';
-                } else if (idx > cidx) {
-                    //if (active_transition) {
-                    //    if (widget.div.style.right == '0px') widget.div.addEventListener('transitionend',function(e){this.style.display='none';},{once:true});
-                    //} else if (widget.div.style.right == '0px') widget.div.style.display = 'none';
-                    widget.div.style.left = '150%';
-                    widget.div.style.right = '-150%';
-                }
-                widget.div.style.visibility = 'hidden';
-            } else if (this._transition == 'flip') widget.div.style.transform = 'rotateX(180deg)';
-            else widget.div.style.display = 'none';
-        }
-
-        _show(widget) {
-            widget.div.style.display = 'flex';
-            widget.div.clientWidth; //hack to set display:flex before opacity transition
-            if (this._transition == 'fade') {
-                widget.div.style.opacity = 1;
-                widget.div.style.visibility = 'visible';
-            } else if (this._transition == 'slide') {
-                var self = this;
-                this._pages.forEach(function(item, index, array) {if (item != widget) self._hide(item);});
-                widget.div.style.left = '0';
-                widget.div.style.right = '0';
-                widget.div.style.visibility = 'visible';
-            } else if (this._transition == 'flip') widget.div.style.transform = 'rotateX(0deg)';
+        _show(name) {
+            if (this._transition == 'slide') Object.entries(this._pages).forEach((k,v)=> {
+                if (k != name) this._hide(name);
+            });
+            this._pages[name].show();
         }
 
         transition(string) {
-            var self = this;
-            this._pages.forEach(function(item, index, array) {item.div.style.transition = 'none';});
-            this._pages.forEach(function(item, index, array) {self._show(item);});
+            Object.entries(this._pages).forEach((k,v) => {
+                this._pages[k].transition(string, (this._current_page == k));
+            });
             this._transition = string;
-            this._pages.forEach(function(item, index, array) {self._hide(item);});
-            if (this._current_page) this._show(this._current_page);
-            if (string == 'fade') {
-                this._pages.forEach(function(item, index, array) {item.div.style.transition = 'opacity 0.3s ease-in-out, visibility 0.3s ease-in-out';});
-            } else if (string == 'slide') {
-                this._pages.forEach(function(item, index, array) {item.div.style.transition = 'left 0.3s ease-in-out, right 0.3s ease-in-out, visibility 0.3s ease-in-out';});
-            } else if (string == 'flip') {
-                this._pages.forEach(function(item, index, array) {item.div.style.transition = 'transform 0.3s ease-in-out';});
-            } else {
-                this._pages.forEach(function(item, index, array) {item.div.style.transition = '';});
-            }
             return this;
         }
 
         setPage(name) {
             var old_page = this._current_page;
-            this._current_page = this[name];
+            this._current_page = name;
             if (old_page) this._hide(old_page);
-            this._show(this[name]);
+            this._show(name);
             return this;
         }
 
