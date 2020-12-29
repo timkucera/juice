@@ -24,11 +24,11 @@
     }
 
     juice.eventListeners = new DefaultDict([]);
-    juice.addEventListener = function(event, fx) {
-        juice.eventListeners[event].push(fx);
+    juice.addEventListener = function(event, fx, ...context) {
+        juice.eventListeners[event].push([fx,context]);
     }
     juice.dispatchEvent = function(event) {
-        for (var fx of juice.eventListeners[event]) fx();
+        for (var [fx,context] of juice.eventListeners[event]) fx.apply(context);
     }
 
     juice.def = function(componentClass) {
@@ -89,11 +89,11 @@
         if (Object.prototype.toString.call(data) !== "[object Object]") data = Object(data);
         data.$events = new DefaultDict([]);
         data.$dispatchEvent = function(event) {
-            for (var [node,fx] of this.$events[event]) node[fx]();
-            for (var [node,fx] of this.$events['any']) node[fx]();
+            for (var [fx,context] of this.$events[event]) fx.apply(context);
+            for (var [fx,context] of this.$events['any']) fx.apply(context);
         }
-        data.$addEventListener = function(event,node,fx) {
-            if (!this.$events[event].some(([n,f]) => n == node && f == fx)) this.$events[event].push([node,fx]);
+        data.$addEventListener = function(event,fx,...context) {
+            if (!this.$events[event].some((f,c) => f == fx && c.every( (v,i) => v === context[i] ))) this.$events[event].push([fx,context]);
         }
         var proxy =  new Proxy(data, {
             set: function(obj, prop, value) {
@@ -105,6 +105,7 @@
                     deleteProperty: function(target, property) {
                         delete target[property];
                         data.$dispatchEvent('change');
+                        data.$dispatchEvent('change:'+property);
                         return true;
                     },
                     set: function(target, property, value, receiver) {
@@ -112,6 +113,7 @@
                         var oldValue = target[property];
                         target[property] = value;
                         if (oldValue != value) data.$dispatchEvent('change');
+                        if (oldValue != value) data.$dispatchEvent('change:'+property);
                         return true;
                     }
                 });
@@ -130,8 +132,12 @@
                 } else return target[prop];
             },
         });
-        for (const [key, value] of Object.entries(data)) proxy[key] = data[key];
+        for (const [key, value] of Object.entries(data)) proxy[key] = value;
         proxy.$data = data;
+        proxy.$update = function(otherData) {
+            console.log('otherData',otherData);
+            for (const [key, value] of Object.entries(otherData)) if (!key.startsWith('$')) this[key] = value;
+        };
         return proxy;
     };
 
@@ -182,8 +188,8 @@
         dispatchEvent(event) {
             if (this.dispatch_timer === undefined) this.dispatch_timer = window.setTimeout(()=>{
                 for (var event of this.dispatch_batch) {
-                    for (var [node,fx] of this.events[event]) node[fx]();
-                    for (var [node,fx] of this.events['any']) node[fx]();
+                    for (var [fx,context] of this.events[event]) fx.apply(context);
+                    for (var [fx,context] of this.events['any']) fx.apply(context);
                 }
                 this.dispatch_batch = new Set();
                 this.dispatch_timer = undefined;
@@ -191,8 +197,8 @@
             this.dispatch_batch.add(event);
         }
 
-        addEventListener(event,node,fx) {
-            if (!this.events[event].some(([n,f]) => n == node && f == fx)) this.events[event].push([node,fx]);
+        addEventListener(event,fx,...context) {
+            if (!this.events[event].some(([f,c]) => f == fx && c.every( (v,i) => v === context[i] ))) this.events[event].push([fx,context]);
         }
 
         append(node) {
@@ -283,7 +289,7 @@
                     node.scope.dom = this.scope.dom;
                     node.render();
                 }
-                if (data.$data) data.$addEventListener('change',this,'rerender');
+                if (data.$data) data.$addEventListener('change',this.rerender, this);
             } else if (this.fx == 'repeat') {
                 var arg = this.args[0];
                 if (arg.$data && arg.$key) var repeats = arg.$data[arg.$key];
@@ -293,7 +299,7 @@
                     node.scope.dom = this.scope.dom;
                     node.render();
                 }
-                if (arg.$data) arg.$data.$addEventListener('change',this,'rerender');
+                if (arg.$data) arg.$data.$addEventListener('change',this.rerender, this);
             } else if (this.fx == 'page') {
                 var name = this.args[0];
                 this.fx = 'def';
@@ -315,7 +321,7 @@
                 graph.scope.dom = this.scope.dom;
                 graph.render();
             } else {
-                if (!this.fx in this.scope.dom.rendered_item) throw 'Function '+this.fx+' not found. '+this.errorstack;
+                if (!(this.fx in this.scope.dom.rendered_item)) throw 'Node <'+this.scope.dom.args[0]+'> has no method .'+this.fx+'()\n'+this.errorstack;
                 this.scope.dom.rendered_item[this.fx](...this.args);
             }
             if (this.after !== undefined) this.after.render();
@@ -359,7 +365,7 @@
             }
             var self = this;
             item.resizeObserver = new ResizeObserver(()=>{self.dispatchEvent('resize');});
-            this.addEventListener('resize',this,'updateDimensions')
+            this.addEventListener('resize',this.updateDimensions, this)
             item.resizeObserver.observe(item.div);
             this.rendered_item = item;
             if (this.scope.dom === undefined) document.body.appendChild(item.div);
@@ -400,7 +406,7 @@
                     else if (obj=='device') var target = DEVICE;
                     else var target = window[obj];
                     var fx = ()=> {var root = target;for (var k of keys) root = root[k];return root};
-                    target.$addEventListener('change',target_node,'checkConditions');
+                    target.$addEventListener('change',target_node.checkConditions, target_node);
                     return fx;
                 }
                 function split(part) {
@@ -521,15 +527,6 @@
             else return false;
         }
 
-        clear() {
-            this._children.forEach(child => {
-                this.div.removeChild(child.div);
-                this[child._name] = undefined;
-            })
-            this._children = [];
-            return this;
-        }
-
         _parse_size_string(string, query) {
             if (string == 'fill') {
                 if (this._parent == undefined) {
@@ -601,6 +598,11 @@
             else format = dict[string];
             this.div.style.flexDirection = format;
             this._flow = format;
+            return this;
+        }
+
+        link(slot) {
+            juice.slot[slot].data.$addEventListener('change:state', this.data.$update, this.data, juice.slot[slot].data);
             return this;
         }
 
