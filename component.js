@@ -76,6 +76,14 @@
             this._state = undefined;
             this.isBold = false;
             this._transition = 'push';
+
+            this.data.$addEventListener('change:state', this._updateFromData, this);
+        }
+
+        _updateFromData() {
+            if (this._state) this.setState(this._state, false);
+            this.setState(this.data.state, true);
+            this._state = this.data.state;
         }
 
         width(string) {
@@ -520,36 +528,20 @@
             this._current_page = false;
             this._transition = 'none';
             this.style('flat rect');
+            this.data.$addEventListener('change:state', this._updateFromData, this);
+        }
+
+        _updateFromData() {
+            this.setPage(this.data.state);
         }
 
         _hide(name) {
-            var direction = this._page_order.indexOf(name) < this._page_order.indexOf(this._current_page) ? 'left' : 'right';
+            for (var item of this._page_order) {
+                if (item == name) var direction = 'left';
+                if (item == this._current_page) var direction = 'right';
+                if (direction) break;
+            }
             this._pages[name].hide(direction);
-            // //var active_transition = (document.readyState === 'interactive' || document.readyState === 'complete')
-            // if (this._transition == 'fade') {
-            //     //if (active_transition) widget.div.addEventListener('transitionend',function(e){if (this.style.opacity == 0) {this.style.display='none';}},{once:true});
-            //     //else widget.div.style.display = 'none';
-            //     widget.div.style.opacity = 0;
-            //     widget.div.style.visibility = 'hidden';
-            // } else if (this._transition == 'slide') {
-            //     var idx = this._pages.indexOf(widget);
-            //     var cidx = this._pages.indexOf(this._current_page);
-            //     if (idx < cidx) {
-            //         //if (active_transition) {
-            //         //    if (widget.div.style.left == '0px') widget.div.addEventListener('transitionend',function(e){this.style.display='none';},{once:true});
-            //         //} else if (widget.div.style.left == '0px') widget.div.style.display = 'none';
-            //         widget.div.style.left = '-150%';
-            //         widget.div.style.right = '150%';
-            //     } else if (idx > cidx) {
-            //         //if (active_transition) {
-            //         //    if (widget.div.style.right == '0px') widget.div.addEventListener('transitionend',function(e){this.style.display='none';},{once:true});
-            //         //} else if (widget.div.style.right == '0px') widget.div.style.display = 'none';
-            //         widget.div.style.left = '150%';
-            //         widget.div.style.right = '-150%';
-            //     }
-            //     widget.div.style.visibility = 'hidden';
-            // } else if (this._transition == 'flip') widget.div.style.transform = 'rotateX(180deg)';
-            // else widget.div.style.display = 'none';
         }
 
         _show(name) {
@@ -572,6 +564,7 @@
             this._current_page = name;
             if (old_page) this._hide(old_page);
             this._show(name);
+            this.data.state = this._current_page;
             return this;
         }
 

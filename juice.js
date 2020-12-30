@@ -16,19 +16,19 @@
     };
 
     class DefaultDict {
-        constructor(defaultVal) {
+        constructor(defaultInit) {
             return new Proxy({}, {
-                get: (target, name) => name in target ? target[name] : defaultVal
+                get: (target, name) => name in target ? target[name] : (target[name] = typeof defaultInit === 'function' ? new defaultInit().valueOf() : defaultInit)
             })
         }
     }
 
-    juice.eventListeners = new DefaultDict([]);
+    juice.eventListeners = new DefaultDict(Array);
     juice.addEventListener = function(event, fx, ...context) {
         juice.eventListeners[event].push([fx,context]);
     }
     juice.dispatchEvent = function(event) {
-        for (var [fx,context] of juice.eventListeners[event]) fx.apply(context);
+        for (var [fx,context] of juice.eventListeners[event]) fx.call(...context);
     }
 
     juice.def = function(componentClass) {
@@ -87,10 +87,10 @@
 
     juice.data = function(data) {
         if (Object.prototype.toString.call(data) !== "[object Object]") data = Object(data);
-        data.$events = new DefaultDict([]);
+        data.$events = new DefaultDict(Array);
         data.$dispatchEvent = function(event) {
-            for (var [fx,context] of this.$events[event]) fx.apply(context);
-            for (var [fx,context] of this.$events['any']) fx.apply(context);
+            for (var [fx,context] of this.$events[event]) fx.call(...context);
+            for (var [fx,context] of this.$events['any']) fx.call(...context);
         }
         data.$addEventListener = function(event,fx,...context) {
             if (!this.$events[event].some((f,c) => f == fx && c.every( (v,i) => v === context[i] ))) this.$events[event].push([fx,context]);
@@ -100,12 +100,13 @@
                 if (!prop.startsWith('$') && Array.isArray(value)) data[prop] = new Proxy(data[prop], {
                     apply: function(target, thisArg, argumentsList) {
                         data.$dispatchEvent('change');
+                        data.$dispatchEvent('change:'+prop);
                         return thisArg[target].apply(this, argumentList);
                     },
                     deleteProperty: function(target, property) {
                         delete target[property];
                         data.$dispatchEvent('change');
-                        data.$dispatchEvent('change:'+property);
+                        data.$dispatchEvent('change:'+prop);
                         return true;
                     },
                     set: function(target, property, value, receiver) {
@@ -113,18 +114,20 @@
                         var oldValue = target[property];
                         target[property] = value;
                         if (oldValue != value) data.$dispatchEvent('change');
-                        if (oldValue != value) data.$dispatchEvent('change:'+property);
+                        if (oldValue != value) data.$dispatchEvent('change:'+prop);
                         return true;
                     }
                 });
                 if (Object.prototype.toString.call(value) !== "[object Object]") value = Object(value);
+                var oldValue = obj[prop];
                 obj[prop] = value;
-                obj.$dispatchEvent('change');
+                if (!prop.startsWith('$') && oldValue != value) data.$dispatchEvent('change');
+                if (!prop.startsWith('$') && oldValue != value) data.$dispatchEvent('change:'+prop);
                 return true;
             },
             get: function (target, prop, receiver) {
                 if (prop == '$length') return Math.max(...Object.entries(target).map(([k,v]) => Array.isArray(v) ? v.length : 1));
-                else if (Object.getOwnPropertyNames(target).includes(prop)) {
+                else if (!prop.startsWith('$') && Object.getOwnPropertyNames(target).includes(prop)) {
                     var obj = Object(target[prop]);
                     obj.$data = target;
                     obj.$key = prop;
@@ -135,7 +138,6 @@
         for (const [key, value] of Object.entries(data)) proxy[key] = value;
         proxy.$data = data;
         proxy.$update = function(otherData) {
-            console.log('otherData',otherData);
             for (const [key, value] of Object.entries(otherData)) if (!key.startsWith('$')) this[key] = value;
         };
         return proxy;
@@ -169,7 +171,7 @@
             this.conditions = [];
             this.conditionNodes = [];
             this.conditionState = undefined;
-            this.events = new DefaultDict([]);
+            this.events = new DefaultDict(Array);
             this.dispatch_batch = new Set();
             this.dispatch_timer = undefined;
             this.data = juice.data({
@@ -188,8 +190,8 @@
         dispatchEvent(event) {
             if (this.dispatch_timer === undefined) this.dispatch_timer = window.setTimeout(()=>{
                 for (var event of this.dispatch_batch) {
-                    for (var [fx,context] of this.events[event]) fx.apply(context);
-                    for (var [fx,context] of this.events['any']) fx.apply(context);
+                    for (var [fx,context] of this.events[event]) fx.call(...context);
+                    for (var [fx,context] of this.events['any']) fx.call(...context);
                 }
                 this.dispatch_batch = new Set();
                 this.dispatch_timer = undefined;
@@ -603,6 +605,12 @@
 
         link(slot) {
             juice.slot[slot].data.$addEventListener('change:state', this.data.$update, this.data, juice.slot[slot].data);
+            return this;
+        }
+
+        sync(slot) {
+            juice.slot[slot].data.$addEventListener('change:state', this.data.$update, this.data, juice.slot[slot].data);
+            this.data.$addEventListener('change:state', juice.slot[slot].data.$update, juice.slot[slot].data, this.data);
             return this;
         }
 
