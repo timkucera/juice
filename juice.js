@@ -85,6 +85,13 @@
         },
     });
 
+    class DataArrayItem {
+        constructor(data, level=0) {
+            this.$data = data;
+            ['$i','$j','$k'].slice(level).forEach(i=>this[i]=new DataArrayItem(data, level+1));
+        }
+    }
+
     juice.data = function(data) {
         if (Object.prototype.toString.call(data) !== "[object Object]") data = Object(data);
         data.$events = new DefaultDict(Array);
@@ -95,7 +102,10 @@
         data.$addEventListener = function(event,fx,...context) {
             if (!this.$events[event].some((f,c) => f == fx && c.every( (v,i) => v === context[i] ))) this.$events[event].push([fx,context]);
         }
-        var proxy =  new Proxy(data, {
+        if (Array.isArray(data)) {
+            ['$i','$j','$k'].forEach(i=>data[i]=new DataArrayItem(data));
+        }
+        var proxy = new Proxy(data, {
             set: function(obj, prop, value) {
                 if (!prop.startsWith('$') && Array.isArray(value)) data[prop] = new Proxy(data[prop], {
                     apply: function(target, thisArg, argumentsList) {
@@ -116,7 +126,7 @@
                         if (oldValue != value) data.$dispatchEvent('change');
                         if (oldValue != value) data.$dispatchEvent('change:'+prop);
                         return true;
-                    }
+                    },
                 });
                 if (Object.prototype.toString.call(value) !== "[object Object]") value = Object(value);
                 var oldValue = obj[prop];
@@ -280,6 +290,7 @@
                         var datapiece = args[0];
                         if (!!datapiece && datapiece === juice.$template) return [fx,[data.$data]]
                         if (!!datapiece && datapiece instanceof TemplateItem && datapiece.template == template) datapiece = data[datapiece.key];
+                        if (!!datapiece && datapiece instanceof DataArrayItem && datapiece.$data == data.$data) return [fx,[datapiece.$data[i]]];
                         if (!!datapiece && datapiece.$data === data.$data) {
                             if (datapiece.$key) datapiece = datapiece.$data[datapiece.$key];
                             if (Array.isArray(datapiece)) return [fx,[datapiece[i]]];
