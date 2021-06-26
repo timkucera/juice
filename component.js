@@ -1,27 +1,13 @@
 (function(component, undefined) {
 
-    function applyStyle(style, elem, color) {
-        var styles = style.split(' ');
-        if (styles.length == 1) {
-            if (style == 'flat') elem.style.cssText += 'border:none;';
-            else if (style == 'border') elem.style.cssText += 'border:2px solid '+color.dark+';';
-            else if (style == 'round') elem.style.cssText += 'border-radius:999px;'; // TODO: smallest side / 2
-            else if (style == 'rounded') elem.style.cssText += 'border-radius:10px;';
-            else if (style == 'rect') elem.style.cssText += 'border-radius:2px;';
-            else if (style == 'sharp') elem.style.cssText += 'border-radius:0px;';
-            else if (style == 'shadow') elem.style.cssText += 'box-shadow:0px 0px 3px '+color.dark+';';
-            else if (style == 'none') elem.style.cssText += 'border:none;background-color:none;';
-        } else styles.forEach(style => applyStyle(style, elem, color));
-    }
-
     component.Button = class Button extends juice.Item {
 
         init() {
             //TODO: change to dynamic gridsize and color
-            this.div.style.cssText += 'justify-content:center;align-items:center;cursor:pointer;color:'+this._color.text+';background-color:'+this._color.normal+';user-select:none;outline:0;-webkit-user-select: none;';
-            this.style('border rect');
-            this.div.addEventListener('mouseover',function() {this.style.filter = 'brightness(90%)'});
-            this.div.addEventListener('mouseleave',function() {this.style.filter = 'none'});
+            this.div.style.cssText += 'justify-content:center;align-items:center;cursor:pointer;user-select:none;outline:0;-webkit-user-select:none;text-align:center;word-wrap:break-word;';
+            this.div.addEventListener('mouseover',function() {this.style.backgroundColor = 'var(--item-color-background-tint1)'});
+            this.div.addEventListener('mouseleave',function() {this.style.backgroundColor = 'var(--item-color-background)'});
+            this.style();
         }
 
         text(text) {
@@ -40,15 +26,10 @@
             if (path.split('.').pop() == 'svg') {
                 if (this.div.svg) this.div.removeChild(this.div.svg);
                 var svg = document.createElement('div');
-                svg.style = 'width:100%;height:100%;background-color:'+this._color.light+';-webkit-mask-image:url('+path+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;transition:background-color 0.2s ease-in-out;';
+                svg.style = 'width:100%;height:100%;background-color:var(--foreground-color);-webkit-mask-image:url('+path+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;transition:background-color 0.2s ease-in-out;';
                 this.div.appendChild(svg);
                 this.div.svg = svg;
             } else this.div.style.content = 'url('+path+')';
-            return this;
-        }
-
-        style(style) {
-            applyStyle(style, this.div, this._color);
             return this;
         }
     }
@@ -56,14 +37,14 @@
     component.Switch = class Switch extends juice.Item {
 
         init() {
-            this.div.style.cssText += 'position:relative;user-select:none;background-color:'+this._color.dark+';';
+            this.div.style.cssText += 'position:relative;user-select:none;';
 
             this.container = document.createElement('div');
             this.container.style.cssText = 'display:grid;height:100%;width:100%;';
             this.div.appendChild(this.container);
 
             this.handle = document.createElement('div');
-            this.handle.style.cssText = 'z-index:1;position:absolute;overflow:hidden;transition:all 0.2s ease-in-out;pointer-events:none;height:100%;';
+            this.handle.style.cssText = 'z-index:1;position:absolute;overflow:hidden;transition:all 0.2s ease-in-out;pointer-events:none;height:100%;display:none;';
             this.div.appendChild(this.handle);
 
             this.handleContainer = document.createElement('div');
@@ -76,6 +57,8 @@
             this._state = undefined;
             this.isBold = false;
             this._transition = 'push';
+
+            this.style();
 
             this.data.$addEventListener('change:state', this._updateFromData, this);
         }
@@ -119,7 +102,7 @@
             }
             if (label === undefined) label = name;
             var state = document.createElement('div');
-            state.style.cssText = 'color:'+this._color.light+';background-color:'+this._color.dark+';cursor:pointer;transition:all 0.2s ease-in-out;display:flex;justify-content:center;align-items:center;padding:5px';
+            state.style.cssText = 'color:var(--foreground-color);background-color:var(--background-color);cursor:pointer;transition:all 0.2s ease-in-out;display:flex;justify-content:center;align-items:center;padding:5px';
             state.addEventListener('mouseover',()=>this.style.filter = 'brightness(150%)');
             state.addEventListener('mouseleave',()=>this.style.filter = 'none');
             var self = this;
@@ -128,12 +111,12 @@
             var content = document.createElement('div');
             if (['svg','png','jpeg','jpg','gif','webp','apng','avif'].includes(label.split('.').pop())) {
                 if (label.split('.').pop() == 'svg') {
-                    content.style.cssText = 'width:80%;height:80%;background-color:'+this._color.light+';-webkit-mask-image:url('+label+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;';
+                    content.style.cssText = 'width:80%;height:80%;background-color:var(--foreground-color);-webkit-mask-image:url('+label+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;';
                 } else content.style.content = 'url('+label+')';
                 state.type = 'image';
             } else {
                 content.innerHTML = label;
-                content.style.color = this._color.light;
+                content.style.color = 'var(--background-color)';
                 if (this.isBold) content.style.fontWeight = 'bold';
                 state.type = 'text';
             }
@@ -146,9 +129,9 @@
             this.handleContainer.style.gridTemplateColumns = ' auto'.repeat(num_states+1);
             state.style.gridColumnStart = num_states+1;
             var handle_clone = state.cloneNode(true);
-            handle_clone.style.backgroundColor = this._color.light;
-            if (state.type == 'image') handle_clone.childNodes[0].style.backgroundColor = this._color.dark;
-            if (state.type == 'text') handle_clone.childNodes[0].style.color = this._color.dark;
+            handle_clone.style.backgroundColor = 'var(--foreground-color)';
+            if (state.type == 'image') handle_clone.childNodes[0].style.backgroundColor = 'var(--background-color)';
+            if (state.type == 'text') handle_clone.childNodes[0].style.color = 'var(--background-color)';
             this.handleContainer.appendChild(handle_clone);
             this.container.appendChild(state);
             this.states[name] = state;
@@ -180,8 +163,8 @@
 
         setState(name,state) {
             if (this._transition == 'push') {
-                var backgroundColor = state ? this._color.light : this._color.dark;
-                var foregroundColor = state ? this._color.dark : this._color.light;
+                var backgroundColor = state ? 'var(--foreground-color)' : 'var(--background-color)';
+                var foregroundColor = state ? 'var(--background-color)' : 'var(--foreground-color)';
                 this.states[name].style.backgroundColor = backgroundColor;
                 if (this.states[name].type == 'image') this.states[name].content.style.backgroundColor = foregroundColor;
                 if (this.states[name].type == 'text') this.states[name].content.style.color = foregroundColor;
@@ -216,16 +199,6 @@
             return this;
         }
 
-        style(style) {
-            this._style = style;
-            applyStyle(style, this.handle, this._color);
-            this.handle.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.light+';border:none;';
-            applyStyle(style, this.div, this._color);
-            this._fixWidth();
-            this._fixHeight();
-            return this;
-        }
-
     }
 
     component.Image = class Image extends juice.Item {
@@ -240,7 +213,7 @@
         source(path) {
             if (path.split('.').pop() == 'svg') {
                 var svg = document.createElement('div');
-                svg.style = 'width:100%;height:100%;background-color:'+this._color.dark+';-webkit-mask-image:url('+path+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;background-color 0.2s ease-in-out;';
+                svg.style = 'width:100%;height:100%;background-color:var(--background-color);-webkit-mask-image:url('+path+');-webkit-mask-size: contain;-webkit-mask-repeat: no-repeat;-webkit-mask-position: 50% 50%;background-color 0.2s ease-in-out;';
                 this.div.appendChild(svg);
                 this.div.svg = svg;
             } else {
@@ -257,18 +230,12 @@
             this._img.src = path;
             return this;
         }*/
-
-        style(style) {
-            applyStyle(style, this.div, this._color);
-            return this;
-        }
     }
 
     component.Shape = class Shape extends juice.Item {
 
         init() {
-            this.div.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.normal+';';
-            this.style('flat rect');
+
         }
 
         shape(string) {
@@ -276,17 +243,13 @@
             return this;
         }
 
-        style(style) {
-            applyStyle(style, this.div, this._color);
-            return this;
-        }
     }
 
     component.Text = class Text extends juice.Item {
 
         init() {
-            this.div.style.cssText += 'color:'+this._color.text+';background-color:'+this._color.normal+';';
-            this.style('flat rect');
+            this.div.style.cssText += '';
+            this.div.style.cssText += 'color:var(--foreground-color);'
         }
 
         text(text) {
@@ -321,22 +284,17 @@
             this.div.style.textAlign = string;
             return this;
         }
-
-        style(style) {
-            applyStyle(style, this.div, this._color);
-            return this;
-        }
     }
 
     component.Progress = class Progress extends juice.Item {
 
         init() {
-            this.div.style.cssText += 'background-color:'+this._color.dark+';display:flex;overflow:hidden;';
+            this.div.style.cssText += 'display:flex;overflow:hidden;';
             this._progress = document.createElement('div');
-            this._progress.style.cssText = 'height:100%;background-color:'+this._color.light+';';
+            this._progress.style.cssText = 'height:100%;';
             this.div.appendChild(this._progress);
             this._direction = 'horizontal';
-            this.style('flat');
+            this.style();
         }
 
         default(value) {
@@ -374,10 +332,6 @@
             return this._value;
         }
 
-        style(style) {
-            applyStyle(style, this.div, this._color);
-            return this;
-        }
     }
 
     component.Slider = class Slider extends juice.Item {
@@ -385,14 +339,15 @@
         init() {
             this._slider = document.createElement('input');
             this._slider.type = 'range';
-            this._slider.style.cssText = 'width:100%;height:5px;outline:none;background-color:'+this._color.dark+';';
+            this._slider.style.cssText = 'width:100%;height:5px;outline:none;';
             this._slider.classList.add('juiceSlider');
-            this._slider.style.setProperty('--handle-color', this._color.light);
-            this._slider.style.setProperty('--handle-border-color', this._color.dark);
+            this._slider.style.setProperty('--handle-color', 'var(--foreground-color)');
+            this._slider.style.setProperty('--handle-border-color', 'var(--background-color)');
             this.div.appendChild(this._slider);
             this.min(1);
             this.max(100);
             this.default(1);
+            this.style();
         }
 
         min(value) {
@@ -441,12 +396,12 @@
     component.Input = class Input extends juice.Item {
 
         init() {
-            this.div.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.light+';';
+            this.div.style.cssText += '';
             this._input = document.createElement('input');
             this._input.autocomplete = 'off';
-            this._input.style = 'object-fit:contain;width:100%;height:100%;border:none;outline:none;padding-left:10px;padding-bottom:2px;color:'+this._color.text+';background-color:#ffffff;caret-color:'+this._color.dark;
+            this._input.style = 'object-fit:contain;width:100%;height:100%;border:none;outline:none;padding-left:10px;padding-bottom:2px;color:var(--background-color);background-color:#ffffff;caret-color:var(--background-color);';
             this.div.appendChild(this._input);
-            this.style('border rect');
+            this.style();
         }
 
         text(string) {
@@ -456,11 +411,6 @@
 
         placeholder(string) {
             this._input.placeholder = string;
-            return this;
-        }
-
-        style(style) {
-            applyStyle(style, this.div, this._color);
             return this;
         }
 
@@ -522,12 +472,11 @@
     component.Pages = class extends juice.Item {
 
         init() {
-            this.div.style.cssText += 'color:'+this._color.dark+';background-color:'+this._color.light+';position:relative;overflow:hidden;';
+            this.div.style.cssText += 'position:relative;overflow:hidden;';
             this._pages = {};
             this._page_order = [];
             this._current_page = false;
             this._transition = 'none';
-            this.style('flat rect');
             this.data.$addEventListener('change:state', this._updateFromData, this);
         }
 
@@ -568,10 +517,6 @@
             return this;
         }
 
-        style(style) {
-            applyStyle(style, this.div, this._color);
-            return this;
-        }
     }
 
 
